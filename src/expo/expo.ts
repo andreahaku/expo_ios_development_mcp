@@ -235,11 +235,17 @@ export async function reloadApp(): Promise<void> {
 
   logger.info("expo", "Reloading app...");
 
-  // Send 'r' key to reload (Expo CLI shortcut)
-  expoProcess.stdin?.write("r");
+  try {
+    // Send 'r' key to reload (Expo CLI shortcut)
+    expoProcess.stdin?.write("r");
 
-  // Wait a bit for reload to start
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+    // Wait a bit for reload to start
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  } catch (error) {
+    throw createError("EXPO_RELOAD_FAILED", "Failed to reload app", {
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
 }
 
 export async function openDevMenu(): Promise<void> {
@@ -249,6 +255,12 @@ export async function openDevMenu(): Promise<void> {
 
   logger.info("expo", "Opening dev menu...");
 
-  // Send 'm' key to open dev menu (Expo CLI shortcut)
-  expoProcess.stdin?.write("m");
+  try {
+    // Send 'm' key to open dev menu (Expo CLI shortcut)
+    expoProcess.stdin?.write("m");
+  } catch (error) {
+    throw createError("EXPO_DEV_MENU_FAILED", "Failed to open dev menu", {
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
 }

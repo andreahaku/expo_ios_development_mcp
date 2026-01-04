@@ -10,6 +10,8 @@ export type ErrorCode =
   | "EXPO_NOT_RUNNING"
   | "EXPO_START_FAILED"
   | "EXPO_CRASHED"
+  | "EXPO_RELOAD_FAILED"
+  | "EXPO_DEV_MENU_FAILED"
   | "DETOX_NOT_READY"
   | "DETOX_SESSION_FAILED"
   | "DETOX_TEST_FAILED"
@@ -73,6 +75,10 @@ export const ErrorRemediation: Record<ErrorCode, string> = {
     "Check that the Expo project path is correct and dependencies are installed.",
   EXPO_CRASHED:
     "Expo/Metro crashed. Check expo logs and restart with expo.start.",
+  EXPO_RELOAD_FAILED:
+    "Failed to reload the app. Check that Expo is running and responsive.",
+  EXPO_DEV_MENU_FAILED:
+    "Failed to open dev menu. Check that Expo is running and the simulator is active.",
   DETOX_NOT_READY:
     "Initialize Detox session first using detox.session.start.",
   DETOX_SESSION_FAILED:
