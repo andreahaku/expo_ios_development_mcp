@@ -7,7 +7,7 @@ import { join, dirname } from "path";
 import { existsSync } from "fs";
 
 export interface ArtifactInfo {
-  type: "screenshot" | "video" | "diff" | "baseline" | "log" | "report";
+  type: "screenshot" | "video" | "diff" | "baseline" | "log" | "report" | "design" | "overlay";
   path: string;
   createdAt: string;
   metadata?: Record<string, unknown>;
@@ -157,7 +157,7 @@ export const artifactManager = new ArtifactManager();
  * Synchronous helper to get artifact path (creates dir if needed)
  */
 export function getArtifactPath(
-  category: "screenshots" | "videos" | "diffs" | "logs" | "baselines",
+  category: "screenshots" | "videos" | "diffs" | "logs" | "baselines" | "designs",
   name: string,
   extension: string
 ): string {

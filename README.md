@@ -146,6 +146,7 @@ Add to `~/.cursor/mcp.json`:
 | `visual.baseline.list` | List saved baselines |
 | `visual.baseline.delete` | Delete a baseline |
 | `visual.compare` | Compare against baseline (uses pixelmatch) |
+| `visual.compare_to_design` | Compare simulator screenshot against pasted Figma/design image |
 
 ### Flow
 
@@ -314,6 +315,31 @@ Compare the current settings page against the baseline and tell me if there are 
 Run visual regression on all saved baselines and report any failures
 ```
 
+### Design Comparison (Figma to Implementation)
+
+The MCP server supports comparing Figma design screenshots directly against the iOS Simulator. Simply copy and paste a Figma screenshot into your prompt!
+
+```
+Here's the Figma design for the login screen. [paste screenshot]
+Compare the current simulator view against this design and tell me the differences.
+```
+
+```
+I've pasted the design mockup for the settings page. [paste screenshot]
+Check if my implementation matches and list what needs to be fixed.
+```
+
+```
+[paste Figma screenshot]
+This is the target design. Please compare it against the simulator and fix any visual differences in the code.
+```
+
+```
+Compare this design against my current implementation:
+[paste screenshot]
+Focus on the header section only (use region comparison).
+```
+
 ### Debugging and Logs
 
 ```
@@ -437,6 +463,19 @@ Erase the simulator to start with a clean slate
 3. "Verify the user lands on the dashboard"
 4. "Save baseline screenshots for key screens"
 5. "Stop session and generate test summary"
+```
+
+### Workflow 5: Design-Driven Development
+
+```
+1. Copy a Figma design screenshot
+2. "Boot simulator and start Expo"
+3. Paste the design: "Implement this login screen design: [paste]"
+4. Claude Code implements the UI components
+5. "Compare my implementation against the design"
+6. Review the diff overlay and feedback
+7. "Fix the spacing issues shown in the comparison"
+8. Repeat comparison until design match is satisfactory
 ```
 
 ---

@@ -105,6 +105,20 @@ export const VisualCompareInputSchema = z.object({
   threshold: z.number().min(0).max(1).optional().describe("Mismatch threshold (0-1). Defaults to config value."),
 });
 
+// Design comparison schema
+export const VisualCompareToDesignInputSchema = z.object({
+  designImage: z.string().describe("Base64 encoded design image (from pasted Figma screenshot)."),
+  name: z.string().optional().describe("Name for organizing artifacts."),
+  threshold: z.number().min(0).max(1).optional().default(0.05).describe("Mismatch threshold (0-1). Default 0.05 for design comparison."),
+  region: z.object({
+    x: z.number().describe("X coordinate of region."),
+    y: z.number().describe("Y coordinate of region."),
+    width: z.number().describe("Width of region."),
+    height: z.number().describe("Height of region."),
+  }).optional().describe("Optional region to compare (crop screenshot to specific area)."),
+  resizeStrategy: z.enum(["design", "actual", "none"]).optional().default("actual").describe("How to handle size differences: resize to design size, actual size, or fail."),
+});
+
 // Flow runner schemas
 export const FlowStepSchema = z.object({
   tool: z.string().describe("Tool name to execute."),

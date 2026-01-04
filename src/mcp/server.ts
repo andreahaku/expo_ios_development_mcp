@@ -56,11 +56,13 @@ import {
   FlowRunInputSchema,
   VisualBaselineSaveInputSchema,
   VisualCompareInputSchema,
+  VisualCompareToDesignInputSchema,
 } from "./schemas.js";
 
 // Import visual modules
 import { saveBaseline, listBaselines, deleteBaseline, baselineExists } from "../visual/baseline.js";
 import { compareWithBaseline, generateDiffReport } from "../visual/diff.js";
+import { compareToDesign, generateDesignReport } from "../visual/design.js";
 
 // Import hardening modules
 import { lockManager, withLock } from "../core/lock.js";
@@ -891,6 +893,70 @@ export function createMcpServer(): McpServer {
             },
           ],
           isError: !result.pass,
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "visual.compare_to_design",
+    "Compare current simulator screenshot against a pasted Figma/design image. Use this to verify that the implementation matches the design mockup. Returns images for LLM visual analysis alongside quantitative pixelmatch data.",
+    VisualCompareToDesignInputSchema.shape,
+    async (args) => {
+      try {
+        const result = await compareToDesign(args.designImage, {
+          name: args.name,
+          threshold: args.threshold,
+          region: args.region,
+          resizeStrategy: args.resizeStrategy,
+        });
+
+        // Generate markdown report for context
+        const report = generateDesignReport(result);
+
+        // Read the overlay image to send back for LLM visual analysis
+        const fs = await import("node:fs");
+        const overlayBuffer = fs.readFileSync(result.artifacts.overlay);
+        const overlayBase64 = overlayBuffer.toString("base64");
+
+        // Also send the diff image for analysis
+        const diffBuffer = fs.readFileSync(result.artifacts.diff);
+        const diffBase64 = diffBuffer.toString("base64");
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `## Design Comparison Results\n\n${report}\n\n**Note**: The images below show a side-by-side overlay (Design | Actual | Diff) and the diff highlighting. Please analyze these visually for semantic differences like layout, spacing, colors, and typography that pixel matching may not capture accurately.`,
+            },
+            {
+              type: "image",
+              data: overlayBase64,
+              mimeType: "image/png",
+            },
+            {
+              type: "text",
+              text: "\n### Diff Image (Red = Differences)\n",
+            },
+            {
+              type: "image",
+              data: diffBase64,
+              mimeType: "image/png",
+            },
+            {
+              type: "text",
+              text: JSON.stringify({
+                match: result.match,
+                matchPercent: result.matchPercent,
+                mismatchPercent: result.mismatchPercent,
+                dimensions: result.dimensions,
+                artifacts: result.artifacts,
+              }, null, 2),
+            },
+          ],
+          isError: !result.match,
         };
       } catch (error) {
         return handleToolError(error);

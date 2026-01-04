@@ -22,6 +22,7 @@ export type ErrorCode =
   | "VISUAL_BASELINE_NOT_FOUND"
   | "VISUAL_BASELINE_EXISTS"
   | "VISUAL_SIZE_MISMATCH"
+  | "VISUAL_DESIGN_INVALID"
   | "CONFIG_INVALID"
   | "CONFIG_NOT_FOUND"
   | "ARTIFACT_WRITE_FAILED"
@@ -100,6 +101,8 @@ export const ErrorRemediation: Record<ErrorCode, string> = {
     "Baseline already exists. Use overwrite: true to replace it.",
   VISUAL_SIZE_MISMATCH:
     "Screenshot dimensions differ from baseline. Device or orientation may have changed.",
+  VISUAL_DESIGN_INVALID:
+    "Design image is invalid or corrupted. Ensure you're pasting a valid PNG or JPEG image.",
   CONFIG_INVALID:
     "Configuration file is invalid. Check mcp.config.json format and required fields.",
   CONFIG_NOT_FOUND:
