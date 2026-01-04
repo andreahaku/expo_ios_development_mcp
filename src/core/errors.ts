@@ -20,6 +20,7 @@ export type ErrorCode =
   | "TIMEOUT"
   | "VISUAL_DIFF_TOO_HIGH"
   | "VISUAL_BASELINE_NOT_FOUND"
+  | "VISUAL_BASELINE_EXISTS"
   | "VISUAL_SIZE_MISMATCH"
   | "CONFIG_INVALID"
   | "CONFIG_NOT_FOUND"
@@ -95,6 +96,8 @@ export const ErrorRemediation: Record<ErrorCode, string> = {
     "Visual difference exceeds threshold. Review the diff image to understand changes.",
   VISUAL_BASELINE_NOT_FOUND:
     "No baseline image found. Save a baseline first using visual.baseline.save.",
+  VISUAL_BASELINE_EXISTS:
+    "Baseline already exists. Use overwrite: true to replace it.",
   VISUAL_SIZE_MISMATCH:
     "Screenshot dimensions differ from baseline. Device or orientation may have changed.",
   CONFIG_INVALID:

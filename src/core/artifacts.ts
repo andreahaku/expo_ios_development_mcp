@@ -152,3 +152,24 @@ class ArtifactManager {
 }
 
 export const artifactManager = new ArtifactManager();
+
+/**
+ * Synchronous helper to get artifact path (creates dir if needed)
+ */
+export function getArtifactPath(
+  category: "screenshots" | "videos" | "diffs" | "logs" | "baselines",
+  name: string,
+  extension: string
+): string {
+  const sessionDir = artifactManager.getSessionDir();
+  const dir = join(sessionDir, category);
+
+  // Ensure directory exists (sync)
+  if (!existsSync(dir)) {
+    const fs = require("fs");
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  const timestamp = Date.now();
+  return join(dir, `${name}_${timestamp}.${extension}`);
+}

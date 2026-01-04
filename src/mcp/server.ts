@@ -54,7 +54,13 @@ import {
   UiAssertTextInputSchema,
   ExpoStartInputSchema,
   FlowRunInputSchema,
+  VisualBaselineSaveInputSchema,
+  VisualCompareInputSchema,
 } from "./schemas.js";
+
+// Import visual modules
+import { saveBaseline, listBaselines, deleteBaseline, baselineExists } from "../visual/baseline.js";
+import { compareWithBaseline, generateDiffReport } from "../visual/diff.js";
 
 export function createMcpServer(): McpServer {
   const server = new McpServer({
@@ -786,6 +792,106 @@ export function createMcpServer(): McpServer {
     }
   );
 
+  // === VISUAL REGRESSION TOOLS ===
+
+  server.tool(
+    "visual.baseline.save",
+    "Save a new baseline screenshot for visual regression testing",
+    {
+      ...VisualBaselineSaveInputSchema.shape,
+      overwrite: z.boolean().optional().default(false).describe("Overwrite existing baseline if it exists."),
+    },
+    async (args) => {
+      try {
+        const result = await saveBaseline(args.name, { overwrite: args.overwrite });
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "visual.baseline.list",
+    "List all saved baselines for the current configuration",
+    {},
+    async () => {
+      try {
+        const baselines = listBaselines();
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(baselines, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "visual.baseline.delete",
+    "Delete a saved baseline",
+    VisualBaselineSaveInputSchema.shape,
+    async (args) => {
+      try {
+        deleteBaseline(args.name);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ success: true, message: `Baseline '${args.name}' deleted` }),
+            },
+          ],
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "visual.compare",
+    "Compare current screenshot against a saved baseline",
+    VisualCompareInputSchema.shape,
+    async (args) => {
+      try {
+        const result = await compareWithBaseline(args.name, {
+          threshold: args.threshold,
+        });
+
+        // Generate markdown report for context
+        const report = generateDiffReport(result);
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+            {
+              type: "text",
+              text: `\n---\n${report}`,
+            },
+          ],
+          isError: !result.pass,
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
   // === RESOURCES ===
 
   server.resource(
@@ -872,7 +978,7 @@ export function createMcpServer(): McpServer {
     }
   );
 
-  logger.info("mcp", "MCP server created with simulator, Expo, and Detox tools registered");
+  logger.info("mcp", "MCP server created with simulator, Expo, Detox, and visual regression tools registered");
 
   return server;
 }

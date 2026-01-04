@@ -132,12 +132,14 @@ Add to `~/.cursor/mcp.json`:
 | `ui.assert_text` | Assert element text content |
 | `ui.screenshot` | Capture UI screenshot |
 
-### Visual Regression (Coming Soon)
+### Visual Regression
 
 | Tool | Description |
 |------|-------------|
 | `visual.baseline.save` | Save baseline screenshot |
-| `visual.compare` | Compare against baseline |
+| `visual.baseline.list` | List saved baselines |
+| `visual.baseline.delete` | Delete a baseline |
+| `visual.compare` | Compare against baseline (uses pixelmatch) |
 
 ## Resources
 
