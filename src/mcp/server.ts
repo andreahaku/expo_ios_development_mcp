@@ -16,6 +16,10 @@ import { takeScreenshot } from "../simulator/screenshots.js";
 import { startVideoRecording, stopVideoRecording, getVideoRecordingStatus } from "../simulator/video.js";
 import { startLogStream, stopLogStream, getSimulatorLogs } from "../simulator/logs.js";
 
+// Import Expo modules
+import { startExpo, stopExpo, getExpoStatus, getExpoLogsTail, reloadApp } from "../expo/expo.js";
+import { runFlow, type ToolExecutor } from "../expo/flow.js";
+
 // Import Detox modules
 import { startDetoxSession, stopDetoxSession, healthCheck, runDetoxAction } from "../detox/runner.js";
 import {
@@ -48,6 +52,8 @@ import {
   UiPressKeyInputSchema,
   UiWaitForInputSchema,
   UiAssertTextInputSchema,
+  ExpoStartInputSchema,
+  FlowRunInputSchema,
 } from "./schemas.js";
 
 export function createMcpServer(): McpServer {
@@ -254,6 +260,115 @@ export function createMcpServer(): McpServer {
             {
               type: "text",
               text: JSON.stringify({ success: true, message: "Log stream stopped" }),
+            },
+          ],
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  // === EXPO TOOLS ===
+
+  server.tool(
+    "expo.start",
+    "Start the Expo/Metro development server",
+    ExpoStartInputSchema.shape,
+    async (args) => {
+      try {
+        const result = await startExpo({
+          clearCache: args.clearCache,
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "expo.stop",
+    "Stop the Expo/Metro development server",
+    {},
+    async () => {
+      try {
+        await stopExpo();
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ success: true, message: "Expo stopped" }),
+            },
+          ],
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "expo.status",
+    "Get the current status of Expo/Metro",
+    {},
+    async () => {
+      try {
+        const status = getExpoStatus();
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(status, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "expo.logs.tail",
+    "Get recent Expo/Metro logs",
+    ExpoLogsTailInputSchema.shape,
+    async (args) => {
+      try {
+        const logs = getExpoLogsTail(args.lines);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(logs, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "expo.reload",
+    "Reload the app in the simulator",
+    {},
+    async () => {
+      try {
+        await reloadApp();
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ success: true, message: "App reload triggered" }),
             },
           ],
         };
@@ -588,6 +703,89 @@ export function createMcpServer(): McpServer {
     }
   );
 
+  // === FLOW RUNNER ===
+
+  // Tool executor for flow.run - maps tool names to implementations
+  const toolExecutor: ToolExecutor = async (toolName, input) => {
+    // This is a simplified executor - in production you might want to
+    // route through the actual MCP tool handlers
+    try {
+      switch (toolName) {
+        case "ui.tap":
+          const tapSnippet = generateTapSnippet({
+            selector: input.selector as { by: "id" | "text" | "label"; value: string },
+            x: input.x as number | undefined,
+            y: input.y as number | undefined,
+          });
+          const tapResult = await runDetoxAction({
+            actionName: `tap:${(input.selector as { value: string }).value}`,
+            actionSnippet: tapSnippet,
+          });
+          return { success: tapResult.success, result: tapResult, error: tapResult.error?.message };
+
+        case "ui.type":
+          const typeSnippet = generateTypeSnippet({
+            selector: input.selector as { by: "id" | "text" | "label"; value: string },
+            text: input.text as string,
+            replace: input.replace as boolean | undefined,
+          });
+          const typeResult = await runDetoxAction({
+            actionName: `type:${(input.selector as { value: string }).value}`,
+            actionSnippet: typeSnippet,
+          });
+          return { success: typeResult.success, result: typeResult, error: typeResult.error?.message };
+
+        case "ui.wait_for":
+          const waitSnippet = generateWaitForSnippet({
+            selector: input.selector as { by: "id" | "text" | "label"; value: string },
+            visible: input.visible as boolean | undefined,
+            timeout: input.timeout as number | undefined,
+          });
+          const waitResult = await runDetoxAction({
+            actionName: `waitFor:${(input.selector as { value: string }).value}`,
+            actionSnippet: waitSnippet,
+          });
+          return { success: waitResult.success, result: waitResult, error: waitResult.error?.message };
+
+        case "simulator.screenshot":
+          const screenshot = await takeScreenshot(input.name as string | undefined);
+          return { success: true, result: screenshot };
+
+        default:
+          return { success: false, error: `Unknown tool: ${toolName}` };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  };
+
+  server.tool(
+    "flow.run",
+    "Execute a sequence of tool calls (macro flow)",
+    FlowRunInputSchema.shape,
+    async (args) => {
+      try {
+        const result = await runFlow(args.steps, toolExecutor, {
+          stopOnError: args.stopOnError,
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+          isError: !result.success,
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
   // === RESOURCES ===
 
   server.resource(
@@ -657,7 +855,24 @@ export function createMcpServer(): McpServer {
     }
   );
 
-  logger.info("mcp", "MCP server created with simulator and Detox tools registered");
+  server.resource(
+    "logs/expo/latest",
+    "resource://logs/expo/latest",
+    async () => {
+      const logs = getExpoLogsTail(200);
+      return {
+        contents: [
+          {
+            uri: "resource://logs/expo/latest",
+            mimeType: "application/json",
+            text: JSON.stringify(logs, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  logger.info("mcp", "MCP server created with simulator, Expo, and Detox tools registered");
 
   return server;
 }

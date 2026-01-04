@@ -104,13 +104,21 @@ Add to `~/.cursor/mcp.json`:
 | `simulator.log_stream.start` | Start log streaming |
 | `simulator.log_stream.stop` | Stop log streaming |
 
-### Expo (Coming Soon)
+### Expo
 
 | Tool | Description |
 |------|-------------|
 | `expo.start` | Start Expo/Metro server |
 | `expo.stop` | Stop Expo/Metro server |
+| `expo.status` | Get Expo/Metro status |
 | `expo.logs.tail` | Get recent Expo logs |
+| `expo.reload` | Reload the app |
+
+### Flow
+
+| Tool | Description |
+|------|-------------|
+| `flow.run` | Execute a sequence of tool calls |
 
 ### UI Automation (Coming Soon)
 
