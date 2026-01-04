@@ -102,8 +102,9 @@ expo_ios_development_mcp/
 │   │   └── output.ts            # JSON output parsing from stdout
 │   └── visual/
 │       ├── diff.ts              # pixelmatch comparison pipeline
-│       └── baseline.ts          # Baseline image management
-├── artifacts/                   # Generated artifacts (screenshots, videos, diffs)
+│       ├── baseline.ts          # Baseline image management
+│       └── design.ts            # Figma/design comparison with LLM analysis
+├── artifacts/                   # Generated artifacts (screenshots, videos, diffs, designs)
 └── docs/
     ├── ARCHITECTURE.md          # Technical architecture documentation
     └── mcp_development_plan.md  # This document
@@ -211,6 +212,7 @@ canRunUiCommands(): boolean {
 | `VISUAL_BASELINE_NOT_FOUND` | Baseline image not found |
 | `VISUAL_BASELINE_EXISTS` | Baseline already exists |
 | `VISUAL_SIZE_MISMATCH` | Image dimensions differ |
+| `VISUAL_DESIGN_INVALID` | Design image is invalid or corrupted |
 | `CONFIG_INVALID` | Invalid configuration |
 | `CONFIG_NOT_FOUND` | Configuration file not found |
 | `ARTIFACT_WRITE_FAILED` | Failed to write artifact |
@@ -289,6 +291,7 @@ MCP defines stdio as the standard and recommended transport for local integratio
 | `visual.baseline.list` | List saved baselines |
 | `visual.baseline.delete` | Delete a baseline |
 | `visual.compare` | Compare against baseline |
+| `visual.compare_to_design` | Compare simulator screenshot against pasted Figma/design image |
 
 #### Flow
 
@@ -652,6 +655,70 @@ export async function compareWithBaseline(
   };
 }
 ```
+
+### 12.3 Design Comparison (Implemented)
+
+Enables comparing iOS Simulator screenshots against pasted Figma/design mockups for design-driven development.
+
+**Key Features:**
+- Accepts base64-encoded design images (pasted from Figma)
+- Handles size differences via configurable resize strategies
+- Returns images for LLM visual analysis (semantic comparison)
+- Generates side-by-side overlay (Design | Actual | Diff)
+
+**Resize Strategies:**
+- `actual` — Resize design to match simulator screenshot (default)
+- `design` — Resize screenshot to match design dimensions
+- `none` — Fail if dimensions differ
+
+**Implementation:**
+
+```typescript
+export async function compareToDesign(
+  designBase64: string,
+  options?: DesignCompareOptions
+): Promise<DesignCompareResult> {
+  // Decode base64 design image
+  const designBuffer = decodeBase64Image(designBase64);
+
+  // Take current simulator screenshot
+  const screenshot = await takeScreenshot(`actual-${name}`);
+
+  // Handle size differences via resize strategy
+  if (designPng.width !== actualPng.width || designPng.height !== actualPng.height) {
+    if (resizeStrategy === "actual") {
+      comparisonActual = resizePng(actualPng, designPng.width, designPng.height);
+    } else if (resizeStrategy === "design") {
+      comparisonDesign = resizePng(designPng, actualPng.width, actualPng.height);
+    }
+  }
+
+  // Compare with pixelmatch (lenient threshold for design comparison)
+  const mismatchPixels = pixelmatch(
+    comparisonDesign.data,
+    comparisonActual.data,
+    diffPng.data,
+    width,
+    height,
+    { threshold: 0.15, includeAA: false }
+  );
+
+  // Generate side-by-side overlay for visual analysis
+  const overlayPng = createOverlay(comparisonDesign, comparisonActual, diffPng);
+
+  return {
+    match: mismatchPercent <= threshold,
+    matchPercent,
+    mismatchPercent,
+    artifacts: { design, actual, diff, overlay },
+    feedback: generateFeedback(mismatchPercent, threshold, resized),
+  };
+}
+```
+
+**LLM Visual Analysis:**
+
+The tool returns overlay and diff images as base64-encoded content that Claude can visually analyze for semantic differences (layout, spacing, colors, typography) that pure pixel matching may not capture accurately.
 
 ---
 
