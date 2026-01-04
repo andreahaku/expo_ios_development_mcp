@@ -1,0 +1,23 @@
+{
+  "projectPath": "/path/to/your/expo-app",
+  "artifactsRoot": "./artifacts",
+  "defaultDeviceName": "iPhone 15",
+  "detox": {
+    "configuration": "ios.sim.debug",
+    "reuseSession": true,
+    "jestBinary": "node_modules/.bin/jest",
+    "detoxBinary": "node_modules/.bin/detox",
+    "testTimeoutMs": 120000
+  },
+  "expo": {
+    "startCommand": "npx expo start --ios",
+    "clearCacheFlag": "--clear"
+  },
+  "visual": {
+    "baselineDir": "./artifacts/baselines",
+    "thresholdDefault": 0.02
+  },
+  "logs": {
+    "ringBufferLines": 20000
+  }
+}

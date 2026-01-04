@@ -1,0 +1,127 @@
+/**
+ * Zod schemas for MCP tool inputs and outputs
+ */
+
+import { z } from "zod";
+
+// Common schemas
+export const SelectorSchema = z.object({
+  by: z.enum(["id", "text", "label"]),
+  value: z.string(),
+});
+
+export const DirectionSchema = z.enum(["up", "down", "left", "right"]);
+
+// Simulator tool schemas
+export const SimulatorBootInputSchema = z.object({
+  device: z.string().optional().describe("Device name or UDID. Defaults to config defaultDeviceName."),
+});
+
+export const SimulatorShutdownInputSchema = z.object({
+  device: z.string().optional().describe("Device name or UDID. If not specified, shuts down the booted device."),
+});
+
+export const SimulatorEraseInputSchema = z.object({
+  device: z.string().describe("Device name or UDID to erase."),
+});
+
+export const SimulatorScreenshotInputSchema = z.object({
+  name: z.string().optional().default("screenshot").describe("Name prefix for the screenshot file."),
+});
+
+export const VideoRecordingInputSchema = z.object({
+  name: z.string().optional().default("recording").describe("Name prefix for the video file."),
+});
+
+// Expo tool schemas
+export const ExpoStartInputSchema = z.object({
+  clearCache: z.boolean().optional().default(false).describe("Clear Metro cache before starting."),
+});
+
+export const ExpoLogsTailInputSchema = z.object({
+  lines: z.number().optional().default(100).describe("Number of log lines to return."),
+});
+
+// Detox session schemas
+export const DetoxSessionStartInputSchema = z.object({
+  configuration: z.string().optional().describe("Detox configuration name. Defaults to config value."),
+  reuse: z.boolean().optional().default(true).describe("Reuse existing session if available."),
+});
+
+// UI action schemas
+export const UiTapInputSchema = z.object({
+  selector: SelectorSchema.describe("Element selector."),
+  x: z.number().optional().describe("X offset from element center."),
+  y: z.number().optional().describe("Y offset from element center."),
+});
+
+export const UiLongPressInputSchema = z.object({
+  selector: SelectorSchema.describe("Element selector."),
+  duration: z.number().optional().default(1000).describe("Press duration in milliseconds."),
+});
+
+export const UiSwipeInputSchema = z.object({
+  selector: SelectorSchema.describe("Element selector to swipe on."),
+  direction: DirectionSchema.describe("Swipe direction."),
+  speed: z.enum(["fast", "slow"]).optional().default("fast").describe("Swipe speed."),
+  percentage: z.number().min(0).max(1).optional().default(0.75).describe("Swipe distance as percentage of element."),
+});
+
+export const UiScrollInputSchema = z.object({
+  selector: SelectorSchema.describe("Scrollable element selector."),
+  direction: DirectionSchema.describe("Scroll direction."),
+  amount: z.number().optional().default(200).describe("Scroll amount in pixels."),
+});
+
+export const UiTypeInputSchema = z.object({
+  selector: SelectorSchema.describe("Input element selector."),
+  text: z.string().describe("Text to type."),
+  replace: z.boolean().optional().default(true).describe("Clear existing text before typing."),
+});
+
+export const UiPressKeyInputSchema = z.object({
+  key: z.enum(["return", "backspace", "delete"]).describe("Key to press."),
+});
+
+export const UiWaitForInputSchema = z.object({
+  selector: SelectorSchema.describe("Element selector to wait for."),
+  visible: z.boolean().optional().default(true).describe("Wait for visibility (true) or existence (false)."),
+  timeout: z.number().optional().default(30000).describe("Timeout in milliseconds."),
+});
+
+export const UiAssertTextInputSchema = z.object({
+  selector: SelectorSchema.describe("Element selector."),
+  text: z.string().describe("Expected text content."),
+  exact: z.boolean().optional().default(true).describe("Exact match (true) or contains (false)."),
+});
+
+// Visual comparison schemas
+export const VisualBaselineSaveInputSchema = z.object({
+  name: z.string().describe("Baseline image name."),
+});
+
+export const VisualCompareInputSchema = z.object({
+  name: z.string().describe("Baseline name to compare against."),
+  threshold: z.number().min(0).max(1).optional().describe("Mismatch threshold (0-1). Defaults to config value."),
+});
+
+// Flow runner schemas
+export const FlowStepSchema = z.object({
+  tool: z.string().describe("Tool name to execute."),
+  input: z.record(z.unknown()).describe("Tool input parameters."),
+  description: z.string().optional().describe("Step description for logging."),
+});
+
+export const FlowRunInputSchema = z.object({
+  steps: z.array(FlowStepSchema).describe("Steps to execute in sequence."),
+  stopOnError: z.boolean().optional().default(true).describe("Stop flow on first error."),
+});
+
+// Type exports
+export type Selector = z.infer<typeof SelectorSchema>;
+export type Direction = z.infer<typeof DirectionSchema>;
+export type UiTapInput = z.infer<typeof UiTapInputSchema>;
+export type UiTypeInput = z.infer<typeof UiTypeInputSchema>;
+export type UiSwipeInput = z.infer<typeof UiSwipeInputSchema>;
+export type UiWaitForInput = z.infer<typeof UiWaitForInputSchema>;
+export type FlowStep = z.infer<typeof FlowStepSchema>;

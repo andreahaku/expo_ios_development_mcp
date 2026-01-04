@@ -1,0 +1,42 @@
+{
+  "name": "expo_ios_development_mcp",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "MCP Server for iOS Simulator + Expo + Detox automation",
+  "author": {
+    "name": "Andrea Salvatore",
+    "email": "andreahaku@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/andreahaku/expo_ios_development_mcp.git"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "verify": "tsx scripts/verify-env.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.24.0",
+    "execa": "^9.5.0",
+    "pino": "^9.0.0",
+    "pngjs": "^7.0.0",
+    "pixelmatch": "^5.3.0",
+    "ejs": "^3.1.10",
+    "uuid": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ejs": "^3.1.5",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
