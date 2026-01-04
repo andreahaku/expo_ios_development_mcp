@@ -175,6 +175,301 @@ The server exposes these MCP resources:
 - `resource://logs/detox/latest` - Recent Detox logs
 - `resource://artifacts/latest` - Artifact manifest
 
+---
+
+## Usage Guide
+
+### Getting Started
+
+Once the MCP server is configured in your LLM client (Claude Code, Cursor, etc.), you can interact with it using natural language. The LLM will automatically invoke the appropriate tools.
+
+### Step 1: Set Up Your Development Session
+
+Before running UI automation, you need to:
+
+1. **Boot the simulator** - Start an iOS Simulator device
+2. **Start Expo** - Launch the Metro bundler and load your app
+3. **Initialize Detox** - Set up the Detox session for UI automation
+
+### Step 2: Develop and Test
+
+With the session ready, you can:
+- Run UI interactions (tap, type, swipe)
+- Take screenshots at any point
+- Assert element states and text content
+- Record videos of interactions
+- Perform visual regression tests
+
+### Step 3: Debug Issues
+
+When something goes wrong:
+- Check logs from Expo/Metro and simulator
+- Take screenshots to see current state
+- Use the debug prompts to investigate crashes
+
+---
+
+## Example Prompts
+
+Here are example prompts you can use with Claude Code, Cursor, or other MCP-enabled LLM tools during Expo app development:
+
+### Session Setup
+
+```
+Boot the iPhone 15 Pro simulator and start my Expo app
+```
+
+```
+Set up a fresh test session - boot the simulator, start Expo, and initialize Detox
+```
+
+```
+List all available iOS simulators and tell me which ones are booted
+```
+
+### Taking Screenshots
+
+```
+Take a screenshot of the current screen and save it as "home-screen"
+```
+
+```
+Take a screenshot after each step of the login flow
+```
+
+```
+Start recording a video, then stop it after I tell you the flow is complete
+```
+
+### UI Automation - Navigation
+
+```
+Tap the "Login" button on the home screen
+```
+
+```
+Navigate to the Settings screen by tapping the settings icon (testID: settings-tab)
+```
+
+```
+Scroll down on the main feed until you see the "Load More" button
+```
+
+### UI Automation - Forms
+
+```
+Fill in the login form:
+- Email: test@example.com
+- Password: password123
+Then tap the Submit button
+```
+
+```
+Type "Hello World" into the search input (testID: search-input) and wait for results to appear
+```
+
+```
+Clear the text in the email field and type a new email address
+```
+
+### UI Automation - Gestures
+
+```
+Swipe left on the first item in the list to reveal delete button
+```
+
+```
+Swipe down to refresh the feed and wait for new content to load
+```
+
+```
+Long press on the profile picture to open the context menu
+```
+
+### Assertions and Verification
+
+```
+Verify that the welcome message shows "Hello, John!"
+```
+
+```
+Wait for the loading spinner to disappear and then check if the data loaded correctly
+```
+
+```
+Assert that the error message "Invalid credentials" is visible after failed login
+```
+
+### Visual Regression Testing
+
+```
+Save a baseline screenshot of the login screen for visual regression testing
+```
+
+```
+Compare the current settings page against the baseline and tell me if there are any visual differences
+```
+
+```
+Run visual regression on all saved baselines and report any failures
+```
+
+### Debugging and Logs
+
+```
+Show me the last 100 lines of Expo logs - I'm seeing a crash
+```
+
+```
+The app crashed after tapping the submit button. Collect evidence: take a screenshot,
+get the logs, and help me debug what went wrong
+```
+
+```
+Start streaming simulator logs so we can monitor for errors during testing
+```
+
+### Complex Flows
+
+```
+Test the complete signup flow:
+1. Tap "Create Account"
+2. Fill in name, email, password
+3. Accept terms and conditions
+4. Tap "Sign Up"
+5. Verify the welcome screen appears
+Take screenshots at each step
+```
+
+```
+Run through the checkout flow and compare each screen against baselines:
+1. Add item to cart
+2. Go to cart
+3. Proceed to checkout
+4. Enter shipping info
+5. Confirm order
+```
+
+```
+Reproduce bug #123:
+The app crashes when tapping the profile button while on the settings page.
+Collect all evidence including screenshots and logs.
+```
+
+### Using Flow Runner
+
+```
+Execute this test flow:
+- Wait for element "welcome-screen"
+- Tap "get-started-button"
+- Wait for element "onboarding-step-1"
+- Swipe left
+- Wait for element "onboarding-step-2"
+- Swipe left
+- Tap "finish-button"
+```
+
+### Expo Development
+
+```
+Check the status of Metro - is it running and what's the bundle URL?
+```
+
+```
+Reload the app to pick up my latest code changes
+```
+
+```
+Stop Expo, clear the cache, and restart it fresh
+```
+
+### Cleanup
+
+```
+Stop the Detox session and shut down the simulator
+```
+
+```
+Erase the simulator to start with a clean slate
+```
+
+---
+
+## Common Workflows
+
+### Workflow 1: Daily Development Cycle
+
+```
+1. "Boot iPhone 15 and start Expo for my app"
+2. Make code changes...
+3. "Reload the app"
+4. "Take a screenshot of the updated UI"
+5. "Tap the new button I added and verify it works"
+6. Repeat...
+```
+
+### Workflow 2: Bug Reproduction
+
+```
+1. "Set up a test session with iPhone 15 Pro"
+2. "Start recording a video"
+3. "Navigate to the screen where the bug occurs"
+4. "Perform the actions that trigger the bug"
+5. "Stop recording and collect logs"
+6. "Take a final screenshot and summarize what happened"
+```
+
+### Workflow 3: Visual Regression Suite
+
+```
+1. "Boot simulator and start Expo"
+2. "Initialize Detox session"
+3. "List all saved baselines"
+4. "Compare each major screen against its baseline"
+5. "Generate a report of any visual differences"
+```
+
+### Workflow 4: End-to-End Testing
+
+```
+1. "Set up fresh test session - erase simulator first for clean state"
+2. "Run the complete user registration flow with test data"
+3. "Verify the user lands on the dashboard"
+4. "Save baseline screenshots for key screens"
+5. "Stop session and generate test summary"
+```
+
+---
+
+## Tips for Effective Prompts
+
+1. **Use testIDs**: Reference elements by their `testID` prop for reliable targeting
+   ```
+   Tap the button with testID "submit-button"
+   ```
+
+2. **Be specific about selectors**: Specify whether you're using id, text, or label
+   ```
+   Tap the element with text "Continue" (not the testID)
+   ```
+
+3. **Chain actions clearly**: Break complex flows into clear steps
+   ```
+   First wait for the login screen, then fill the form, then tap submit
+   ```
+
+4. **Request evidence**: Ask for screenshots and logs when debugging
+   ```
+   Take a screenshot before and after tapping the button
+   ```
+
+5. **Use flow.run for sequences**: For repeatable test flows, use the flow runner
+   ```
+   Execute this as a flow: tap login, type email, type password, tap submit
+   ```
+
+---
+
 ## Development
 
 ```bash
