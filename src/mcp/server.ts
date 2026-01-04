@@ -16,6 +16,21 @@ import { takeScreenshot } from "../simulator/screenshots.js";
 import { startVideoRecording, stopVideoRecording, getVideoRecordingStatus } from "../simulator/video.js";
 import { startLogStream, stopLogStream, getSimulatorLogs } from "../simulator/logs.js";
 
+// Import Detox modules
+import { startDetoxSession, stopDetoxSession, healthCheck, runDetoxAction } from "../detox/runner.js";
+import {
+  generateTapSnippet,
+  generateLongPressSnippet,
+  generateSwipeSnippet,
+  generateScrollSnippet,
+  generateTypeSnippet,
+  generatePressKeySnippet,
+  generateWaitForSnippet,
+  generateAssertTextSnippet,
+  generateAssertVisibleSnippet,
+} from "../detox/actions.js";
+import { describeSelector } from "../detox/selectors.js";
+
 // Import schemas
 import {
   SimulatorBootInputSchema,
@@ -24,6 +39,15 @@ import {
   SimulatorScreenshotInputSchema,
   VideoRecordingInputSchema,
   ExpoLogsTailInputSchema,
+  DetoxSessionStartInputSchema,
+  UiTapInputSchema,
+  UiLongPressInputSchema,
+  UiSwipeInputSchema,
+  UiScrollInputSchema,
+  UiTypeInputSchema,
+  UiPressKeyInputSchema,
+  UiWaitForInputSchema,
+  UiAssertTextInputSchema,
 } from "./schemas.js";
 
 export function createMcpServer(): McpServer {
@@ -239,6 +263,331 @@ export function createMcpServer(): McpServer {
     }
   );
 
+  // === DETOX SESSION TOOLS ===
+
+  server.tool(
+    "detox.session.start",
+    "Start a Detox testing session. Required before running UI actions.",
+    DetoxSessionStartInputSchema.shape,
+    async (args) => {
+      try {
+        const result = await startDetoxSession(args.configuration);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ success: true, ...result }, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "detox.session.stop",
+    "Stop the current Detox testing session",
+    {},
+    async () => {
+      try {
+        await stopDetoxSession();
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ success: true, message: "Detox session stopped" }),
+            },
+          ],
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "detox.healthcheck",
+    "Check if Detox session is ready",
+    {},
+    async () => {
+      try {
+        const result = await healthCheck();
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  // === UI TOOLS (via Detox) ===
+
+  server.tool(
+    "ui.tap",
+    "Tap on an element identified by selector",
+    UiTapInputSchema.shape,
+    async (args) => {
+      try {
+        const snippet = generateTapSnippet({
+          selector: args.selector,
+          x: args.x,
+          y: args.y,
+        });
+        const result = await runDetoxAction({
+          actionName: `tap:${describeSelector(args.selector)}`,
+          actionSnippet: snippet,
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+          isError: !result.success,
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "ui.long_press",
+    "Long press on an element",
+    UiLongPressInputSchema.shape,
+    async (args) => {
+      try {
+        const snippet = generateLongPressSnippet({
+          selector: args.selector,
+          duration: args.duration,
+        });
+        const result = await runDetoxAction({
+          actionName: `longPress:${describeSelector(args.selector)}`,
+          actionSnippet: snippet,
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+          isError: !result.success,
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "ui.swipe",
+    "Swipe on an element in a direction",
+    UiSwipeInputSchema.shape,
+    async (args) => {
+      try {
+        const snippet = generateSwipeSnippet({
+          selector: args.selector,
+          direction: args.direction,
+          speed: args.speed,
+          percentage: args.percentage,
+        });
+        const result = await runDetoxAction({
+          actionName: `swipe:${args.direction}:${describeSelector(args.selector)}`,
+          actionSnippet: snippet,
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+          isError: !result.success,
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "ui.scroll",
+    "Scroll within a scrollable element",
+    UiScrollInputSchema.shape,
+    async (args) => {
+      try {
+        const snippet = generateScrollSnippet({
+          selector: args.selector,
+          direction: args.direction,
+          amount: args.amount,
+        });
+        const result = await runDetoxAction({
+          actionName: `scroll:${args.direction}:${describeSelector(args.selector)}`,
+          actionSnippet: snippet,
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+          isError: !result.success,
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "ui.type",
+    "Type text into an input element",
+    UiTypeInputSchema.shape,
+    async (args) => {
+      try {
+        const snippet = generateTypeSnippet({
+          selector: args.selector,
+          text: args.text,
+          replace: args.replace,
+        });
+        const result = await runDetoxAction({
+          actionName: `type:${describeSelector(args.selector)}`,
+          actionSnippet: snippet,
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+          isError: !result.success,
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "ui.press_key",
+    "Press a special key (return, backspace, delete)",
+    UiPressKeyInputSchema.shape,
+    async (args) => {
+      try {
+        const snippet = generatePressKeySnippet(args.key);
+        const result = await runDetoxAction({
+          actionName: `pressKey:${args.key}`,
+          actionSnippet: snippet,
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+          isError: !result.success,
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "ui.wait_for",
+    "Wait for an element to be visible or exist",
+    UiWaitForInputSchema.shape,
+    async (args) => {
+      try {
+        const snippet = generateWaitForSnippet({
+          selector: args.selector,
+          visible: args.visible,
+          timeout: args.timeout,
+        });
+        const result = await runDetoxAction({
+          actionName: `waitFor:${describeSelector(args.selector)}`,
+          actionSnippet: snippet,
+          timeoutMs: (args.timeout ?? 30000) + 5000, // Add buffer
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+          isError: !result.success,
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "ui.assert_text",
+    "Assert that an element has specific text content",
+    UiAssertTextInputSchema.shape,
+    async (args) => {
+      try {
+        const snippet = generateAssertTextSnippet({
+          selector: args.selector,
+          text: args.text,
+          exact: args.exact,
+        });
+        const result = await runDetoxAction({
+          actionName: `assertText:${describeSelector(args.selector)}`,
+          actionSnippet: snippet,
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+          isError: !result.success,
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "ui.screenshot",
+    "Take a screenshot of the current UI state (via simctl)",
+    SimulatorScreenshotInputSchema.shape,
+    async (args) => {
+      try {
+        const result = await takeScreenshot(args.name ?? "ui-screenshot");
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ success: true, ...result }, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
   // === RESOURCES ===
 
   server.resource(
@@ -291,7 +640,24 @@ export function createMcpServer(): McpServer {
     }
   );
 
-  logger.info("mcp", "MCP server created with simulator tools registered");
+  server.resource(
+    "logs/detox/latest",
+    "resource://logs/detox/latest",
+    async () => {
+      const logs = logger.tail("detox", 200);
+      return {
+        contents: [
+          {
+            uri: "resource://logs/detox/latest",
+            mimeType: "application/json",
+            text: JSON.stringify(logs, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  logger.info("mcp", "MCP server created with simulator and Detox tools registered");
 
   return server;
 }

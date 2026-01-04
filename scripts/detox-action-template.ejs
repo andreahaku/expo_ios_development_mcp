@@ -1,0 +1,49 @@
+/* eslint-disable */
+/**
+ * Auto-generated Detox micro-test for MCP action execution
+ * Generated at: <%= timestamp %>
+ * Action: <%= actionName %>
+ */
+
+const { device, element, by, expect, waitFor } = require('detox');
+
+function mcpPrint(obj) {
+  // Marker for output parsing
+  process.stdout.write(`\n[MCP_RESULT]${JSON.stringify(obj)}[/MCP_RESULT]\n`);
+}
+
+describe('mcp_action', () => {
+  beforeAll(async () => {
+<% if (launchApp) { %>
+    await device.launchApp({ newInstance: false });
+<% } %>
+  });
+
+  it('run', async () => {
+    const startedAt = Date.now();
+    let result = { ok: true };
+
+    try {
+      // ===== ACTION START =====
+      <%- actionSnippet %>
+      // ===== ACTION END =====
+
+      result.elapsedMs = Date.now() - startedAt;
+<% if (captureData) { %>
+      result.data = capturedData;
+<% } %>
+    } catch (error) {
+      result = {
+        ok: false,
+        error: {
+          message: error.message,
+          name: error.name,
+          stack: error.stack
+        },
+        elapsedMs: Date.now() - startedAt
+      };
+    }
+
+    mcpPrint(result);
+  });
+});
