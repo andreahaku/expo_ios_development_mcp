@@ -58,9 +58,19 @@ export async function compareWithBaseline(
     });
   }
 
-  // Take current screenshot
-  const screenshot = await takeScreenshot(`compare-${baselineName}`);
-  const actualPath = screenshot.path;
+  let actualPath: string;
+
+  try {
+    // Take current screenshot
+    const screenshot = await takeScreenshot(`compare-${baselineName}`);
+    actualPath = screenshot.path;
+  } catch (error) {
+    throw createError("ARTIFACT_WRITE_FAILED", "Failed to take screenshot for comparison", {
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+
+  try {
 
   // Load images
   const baselineBuffer = loadBaseline(baselineName);
@@ -134,6 +144,15 @@ export async function compareWithBaseline(
   }
 
   return result;
+  } catch (error) {
+    // Re-throw McpOperationError as-is
+    if (error && typeof error === 'object' && 'code' in error) {
+      throw error;
+    }
+    throw createError("VISUAL_DIFF_TOO_HIGH", "Failed to compare images", {
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
 }
 
 /**

@@ -75,40 +75,46 @@ export async function saveBaseline(
     });
   }
 
-  // Take a screenshot
-  const screenshot = await takeScreenshot(`baseline-${name}`);
+  try {
+    // Take a screenshot
+    const screenshot = await takeScreenshot(`baseline-${name}`);
 
-  // Ensure baseline directory exists
-  const baselineDir = getBaselineDir();
-  fs.mkdirSync(baselineDir, { recursive: true });
+    // Ensure baseline directory exists
+    const baselineDir = getBaselineDir();
+    fs.mkdirSync(baselineDir, { recursive: true });
 
-  // Copy screenshot to baseline location
-  const baselinePath = getBaselinePath(name);
-  fs.copyFileSync(screenshot.path, baselinePath);
+    // Copy screenshot to baseline location
+    const baselinePath = getBaselinePath(name);
+    fs.copyFileSync(screenshot.path, baselinePath);
 
-  // Get image dimensions
-  const dimensions = await getImageDimensions(baselinePath);
+    // Get image dimensions
+    const dimensions = await getImageDimensions(baselinePath);
 
-  const config = getConfig();
-  const simState = stateManager.getSimulator();
+    const config = getConfig();
+    const simState = stateManager.getSimulator();
 
-  const info: BaselineInfo = {
-    name,
-    path: baselinePath,
-    configuration: config.detox?.configuration ?? "default",
-    deviceName: simState.deviceName ?? config.defaultDeviceName ?? "unknown",
-    createdAt: new Date().toISOString(),
-    size: dimensions,
-  };
+    const info: BaselineInfo = {
+      name,
+      path: baselinePath,
+      configuration: config.detox?.configuration ?? "default",
+      deviceName: simState.deviceName ?? config.defaultDeviceName ?? "unknown",
+      createdAt: new Date().toISOString(),
+      size: dimensions,
+    };
 
-  logger.info("visual", `Baseline saved: ${baselinePath}`, {
-    name: info.name,
-    path: info.path,
-    configuration: info.configuration,
-    deviceName: info.deviceName,
-  });
+    logger.info("visual", `Baseline saved: ${baselinePath}`, {
+      name: info.name,
+      path: info.path,
+      configuration: info.configuration,
+      deviceName: info.deviceName,
+    });
 
-  return info;
+    return info;
+  } catch (error) {
+    throw createError("ARTIFACT_WRITE_FAILED", `Failed to save baseline '${name}'`, {
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
 }
 
 /**
