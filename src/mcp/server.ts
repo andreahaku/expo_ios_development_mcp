@@ -62,6 +62,10 @@ import {
 import { saveBaseline, listBaselines, deleteBaseline, baselineExists } from "../visual/baseline.js";
 import { compareWithBaseline, generateDiffReport } from "../visual/diff.js";
 
+// Import hardening modules
+import { lockManager, withLock } from "../core/lock.js";
+import { registerPrompts } from "./prompts.js";
+
 export function createMcpServer(): McpServer {
   const server = new McpServer({
     name: "expo-ios-detox",
@@ -98,7 +102,9 @@ export function createMcpServer(): McpServer {
     async (args) => {
       try {
         const device = args.device ?? (hasConfig() ? getConfig().defaultDeviceName : "iPhone 15");
-        const result = await bootDevice(device);
+        const result = await withLock("simulator", "boot", async () => {
+          return bootDevice(device);
+        }, { timeoutMs: 120000 });
         return {
           content: [
             {
@@ -978,7 +984,10 @@ export function createMcpServer(): McpServer {
     }
   );
 
-  logger.info("mcp", "MCP server created with simulator, Expo, Detox, and visual regression tools registered");
+  // Register prompt templates
+  registerPrompts(server);
+
+  logger.info("mcp", "MCP server created with simulator, Expo, Detox, visual regression tools, and prompt templates registered");
 
   return server;
 }

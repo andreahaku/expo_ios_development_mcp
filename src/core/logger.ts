@@ -5,7 +5,7 @@
 export interface LogEntry {
   timestamp: string;
   level: "debug" | "info" | "warn" | "error";
-  source: "mcp" | "simulator" | "expo" | "detox" | "visual";
+  source: "mcp" | "simulator" | "expo" | "detox" | "visual" | "lock" | "retry";
   message: string;
   data?: Record<string, unknown>;
 }

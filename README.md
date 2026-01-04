@@ -141,6 +141,18 @@ Add to `~/.cursor/mcp.json`:
 | `visual.baseline.delete` | Delete a baseline |
 | `visual.compare` | Compare against baseline (uses pixelmatch) |
 
+## Prompt Templates
+
+The server provides discoverable prompt templates for common workflows:
+
+| Prompt | Description |
+|--------|-------------|
+| `repro_and_collect_evidence` | Reproduce a bug and collect evidence |
+| `ui_regression_check` | Perform visual regression testing |
+| `test_user_flow` | Test a complete user flow |
+| `debug_app_crash` | Debug an app crash |
+| `setup_test_session` | Set up a fresh test session |
+
 ## Resources
 
 The server exposes these MCP resources:
