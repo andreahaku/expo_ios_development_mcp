@@ -10,6 +10,8 @@ An MCP (Model Context Protocol) server that enables LLM tools like Claude Code, 
 - **Expo/Metro**: Start/stop Expo development server
 - **UI Automation**: Execute Detox actions (tap, swipe, type, wait, assert)
 - **Visual Regression**: Screenshot comparison with pixelmatch
+- **Concurrency Control**: Lock manager prevents conflicting operations
+- **Retry with Backoff**: Automatic retry for transient failures
 
 ## Prerequisites
 
@@ -114,23 +116,27 @@ Add to `~/.cursor/mcp.json`:
 | `expo.logs.tail` | Get recent Expo logs |
 | `expo.reload` | Reload the app |
 
-### Flow
+### Detox Session
 
 | Tool | Description |
 |------|-------------|
-| `flow.run` | Execute a sequence of tool calls |
+| `detox.session.start` | Initialize Detox session |
+| `detox.session.stop` | Terminate Detox session |
+| `detox.healthcheck` | Verify Detox is ready |
 
-### UI Automation (Coming Soon)
+### UI Automation
 
 | Tool | Description |
 |------|-------------|
 | `ui.tap` | Tap an element |
+| `ui.long_press` | Long press an element |
 | `ui.type` | Type text into an input |
 | `ui.swipe` | Swipe gesture |
 | `ui.scroll` | Scroll in a direction |
+| `ui.press_key` | Press a keyboard key |
 | `ui.wait_for` | Wait for element visibility |
 | `ui.assert_text` | Assert element text content |
-| `ui.screenshot` | Capture UI screenshot |
+| `ui.assert_visible` | Assert element is visible |
 
 ### Visual Regression
 
@@ -140,6 +146,12 @@ Add to `~/.cursor/mcp.json`:
 | `visual.baseline.list` | List saved baselines |
 | `visual.baseline.delete` | Delete a baseline |
 | `visual.compare` | Compare against baseline (uses pixelmatch) |
+
+### Flow
+
+| Tool | Description |
+|------|-------------|
+| `flow.run` | Execute a sequence of tool calls |
 
 ## Prompt Templates
 
@@ -159,6 +171,8 @@ The server exposes these MCP resources:
 
 - `resource://state` - Current server state (simulator, expo, detox)
 - `resource://logs/simulator/latest` - Recent simulator logs
+- `resource://logs/expo/latest` - Recent Expo logs
+- `resource://logs/detox/latest` - Recent Detox logs
 - `resource://artifacts/latest` - Artifact manifest
 
 ## Development
@@ -172,21 +186,48 @@ pnpm build
 
 # Run production build
 pnpm start
+
+# Enable debug logging
+MCP_DEBUG=true pnpm dev
 ```
 
 ## Architecture
 
+The server is organized into modular subsystems:
+
 ```
 src/
   index.ts          # MCP stdio entrypoint
-  config/           # Configuration loading
-  core/             # State, errors, logger, artifacts
-  mcp/              # MCP server and schemas
-  simulator/        # simctl wrapper
-  expo/             # Expo/Metro control (Phase 3)
-  detox/            # Detox runner (Phase 2)
-  visual/           # Visual regression (Phase 4)
+  config/           # Configuration loading and validation
+  core/             # State machine, errors, logger, artifacts, lock, retry
+  mcp/              # MCP server, schemas, prompt templates
+  simulator/        # simctl wrapper (devices, screenshots, video, logs)
+  expo/             # Expo/Metro control (start, stop, logs, flow runner)
+  detox/            # Detox micro-test runner (actions, selectors, output parsing)
+  visual/           # Visual regression (baseline management, pixelmatch diff)
 ```
+
+### Key Patterns
+
+- **State Machine**: Tracks simulator, Expo, and Detox states; UI commands require `simulator.booted + detox.ready`
+- **Detox Micro-Tests**: UI actions generate temporary Jest tests, run via Detox CLI, parse `[MCP_RESULT]` markers
+- **Error Taxonomy**: LLM-friendly error codes with auto-populated remediation hints
+- **Ring Buffer Logging**: Per-source log retention (20,000 entries each)
+
+### Code Metrics
+
+| Metric | Value |
+|--------|-------|
+| Total Files | 27 |
+| Total Lines | 4,768 |
+| Avg Complexity | 12.9 |
+| Code Consistency | 99% |
+| Circular Deps | 0 |
+
+## Documentation
+
+- **[Architecture Documentation](docs/ARCHITECTURE.md)** - Detailed technical architecture with diagrams
+- **[Implementation Plan](docs/mcp_development_plan.md)** - Full implementation document with code examples
 
 ## Author
 
