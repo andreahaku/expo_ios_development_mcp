@@ -29,6 +29,14 @@ export const CONFIDENCE_TESTID_EXPLICIT = 1.0;
 export const CONFIDENCE_LABEL_EXPLICIT = 0.95;
 export const CONFIDENCE_QUOTED_TEXT = 0.7;
 export const CONFIDENCE_BUTTON_TEXT = 0.75;
+export const CONFIDENCE_COMMON_BUTTON = 0.6;
+export const CONFIDENCE_INPUT_FIELD = 0.5;
+export const CONFIDENCE_AVATAR = 0.5;
+export const CONFIDENCE_LOGO = 0.4;
+
+// String length limits
+export const MAX_TESTID_LENGTH = 40;
+export const MAX_SLUG_LENGTH = 30;
 
 // Text truncation lengths for reports
 export const TRUNCATE_ELEMENT_DESCRIPTION = 40;

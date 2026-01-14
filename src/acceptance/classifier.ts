@@ -8,6 +8,18 @@ import type {
   ElementSelector,
   CheckConfig,
 } from "./types.js";
+import {
+  CONFIDENCE_TESTID_EXPLICIT,
+  CONFIDENCE_LABEL_EXPLICIT,
+  CONFIDENCE_QUOTED_TEXT,
+  CONFIDENCE_BUTTON_TEXT,
+  CONFIDENCE_COMMON_BUTTON,
+  CONFIDENCE_INPUT_FIELD,
+  CONFIDENCE_AVATAR,
+  CONFIDENCE_LOGO,
+  MAX_TESTID_LENGTH,
+  MAX_SLUG_LENGTH,
+} from "./constants.js";
 
 /**
  * Classify criterion type based on description text
@@ -189,7 +201,7 @@ export function inferSelectorFromDescription(
     return {
       by: "id",
       value: testIdMatch[1],
-      confidence: 1.0,
+      confidence: CONFIDENCE_TESTID_EXPLICIT,
     };
   }
 
@@ -201,7 +213,7 @@ export function inferSelectorFromDescription(
     return {
       by: "label",
       value: labelMatch[1],
-      confidence: 0.95,
+      confidence: CONFIDENCE_LABEL_EXPLICIT,
     };
   }
 
@@ -213,7 +225,7 @@ export function inferSelectorFromDescription(
     return {
       by: "text",
       value: quotedMatch[1],
-      confidence: 0.7,
+      confidence: CONFIDENCE_QUOTED_TEXT,
     };
   }
 
@@ -225,7 +237,7 @@ export function inferSelectorFromDescription(
     return {
       by: "text",
       value: buttonTextMatch[1],
-      confidence: 0.75,
+      confidence: CONFIDENCE_BUTTON_TEXT,
     };
   }
 
@@ -233,14 +245,14 @@ export function inferSelectorFromDescription(
   const elementPatterns = [
     {
       pattern: /\b(Login|Sign\s*In|Sign\s*Up|Submit|Cancel|Save|Delete|Edit|Close)\s+button\b/i,
-      confidence: 0.6,
+      confidence: CONFIDENCE_COMMON_BUTTON,
     },
     {
       pattern: /\b(email|password|username|search)\s+(?:input\s+)?field\b/i,
-      confidence: 0.5,
+      confidence: CONFIDENCE_INPUT_FIELD,
     },
-    { pattern: /\bavatar(?:\s+button)?\b/i, confidence: 0.5 },
-    { pattern: /\blogo\b/i, confidence: 0.4 },
+    { pattern: /\bavatar(?:\s+button)?\b/i, confidence: CONFIDENCE_AVATAR },
+    { pattern: /\blogo\b/i, confidence: CONFIDENCE_LOGO },
   ];
 
   for (const { pattern, confidence } of elementPatterns) {
@@ -287,7 +299,7 @@ export function inferTestId(description: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
-    .slice(0, 40);
+    .slice(0, MAX_TESTID_LENGTH);
 }
 
 /**
@@ -299,5 +311,5 @@ export function slugify(text: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
-    .slice(0, 30);
+    .slice(0, MAX_SLUG_LENGTH);
 }

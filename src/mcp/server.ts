@@ -81,6 +81,8 @@ import {
   saveReport,
   getCriteriaStats,
   DEFAULT_CRITERION_TIMEOUT_MS,
+  TRUNCATE_DESCRIPTION_SHORT,
+  TRUNCATE_MESSAGE_SHORT,
 } from "../acceptance/index.js";
 
 // Import hardening modules
@@ -987,7 +989,8 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "acceptance.parse",
-    "Parse an acceptance criteria markdown file and return structured test criteria. Use this to understand what criteria exist before running tests.",
+    "Parse an acceptance criteria markdown file and return structured test criteria. " +
+      "Use this to understand what criteria exist before running tests.",
     AcceptanceParseInputSchema.shape,
     async (args) => {
       try {
@@ -1157,12 +1160,12 @@ export function createMcpServer(): McpServer {
 
         for (const stepResult of result.stepResults) {
           const status = stepResult.status.toUpperCase();
-          const desc = stepResult.step.description.slice(0, 50);
+          const desc = stepResult.step.description.slice(0, TRUNCATE_DESCRIPTION_SHORT);
           let details = "";
           if (stepResult.missingRequirements?.length) {
             details = `Missing: \`${stepResult.missingRequirements[0].suggestedValue}\``;
           } else if (stepResult.status !== "pass") {
-            details = stepResult.message.slice(0, 40);
+            details = stepResult.message.slice(0, TRUNCATE_MESSAGE_SHORT);
           }
           lines.push(`| ${stepResult.step.stepNumber} | ${desc} | ${status} | ${details} |`);
         }
