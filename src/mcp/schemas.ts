@@ -131,6 +131,37 @@ export const FlowRunInputSchema = z.object({
   stopOnError: z.boolean().optional().default(true).describe("Stop flow on first error."),
 });
 
+// Acceptance criteria schemas
+export const AcceptanceParseInputSchema = z.object({
+  filePath: z.string().optional().describe("Path to acceptance criteria markdown file."),
+  content: z.string().optional().describe("Markdown content to parse (alternative to filePath)."),
+});
+
+export const AcceptanceRunInputSchema = z.object({
+  filePath: z.string().optional().describe("Path to acceptance criteria markdown file."),
+  content: z.string().optional().describe("Markdown content to test against."),
+  stopOnFailure: z.boolean().optional().default(false).describe("Stop testing on first failure."),
+  sections: z.array(z.string()).optional().describe("Specific sections to test (omit for all)."),
+  skipFlows: z.boolean().optional().default(false).describe("Skip test flow execution."),
+  skipManual: z.boolean().optional().default(true).describe("Skip manual verification criteria."),
+  captureEvidenceOnPass: z.boolean().optional().default(false).describe("Capture screenshots for passing tests."),
+  timeout: z.number().optional().default(30000).describe("Timeout per criterion in milliseconds."),
+});
+
+export const AcceptanceRunFlowInputSchema = z.object({
+  filePath: z.string().optional().describe("Path to acceptance criteria file."),
+  content: z.string().optional().describe("Markdown content."),
+  flowName: z.string().describe("Name of the test flow to execute."),
+  screenshotEachStep: z.boolean().optional().default(true).describe("Capture screenshot after each step."),
+});
+
+export const AcceptanceCheckInputSchema = z.object({
+  filePath: z.string().optional().describe("Path to acceptance criteria file."),
+  content: z.string().optional().describe("Markdown content."),
+  criterionId: z.string().optional().describe("Criterion ID to check."),
+  description: z.string().optional().describe("Criterion description to match (partial match)."),
+});
+
 // Type exports
 export type Selector = z.infer<typeof SelectorSchema>;
 export type Direction = z.infer<typeof DirectionSchema>;
@@ -139,3 +170,7 @@ export type UiTypeInput = z.infer<typeof UiTypeInputSchema>;
 export type UiSwipeInput = z.infer<typeof UiSwipeInputSchema>;
 export type UiWaitForInput = z.infer<typeof UiWaitForInputSchema>;
 export type FlowStep = z.infer<typeof FlowStepSchema>;
+export type AcceptanceParseInput = z.infer<typeof AcceptanceParseInputSchema>;
+export type AcceptanceRunInput = z.infer<typeof AcceptanceRunInputSchema>;
+export type AcceptanceRunFlowInput = z.infer<typeof AcceptanceRunFlowInputSchema>;
+export type AcceptanceCheckInput = z.infer<typeof AcceptanceCheckInputSchema>;

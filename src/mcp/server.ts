@@ -7,7 +7,7 @@ import { z } from "zod";
 import { stateManager } from "../core/state.js";
 import { logger } from "../core/logger.js";
 import { artifactManager } from "../core/artifacts.js";
-import { McpOperationError } from "../core/errors.js";
+import { McpOperationError, createError } from "../core/errors.js";
 import { getConfig, hasConfig } from "../config/load.js";
 
 // Import simulator modules
@@ -57,12 +57,30 @@ import {
   VisualBaselineSaveInputSchema,
   VisualCompareInputSchema,
   VisualCompareToDesignInputSchema,
+  AcceptanceParseInputSchema,
+  AcceptanceRunInputSchema,
+  AcceptanceRunFlowInputSchema,
+  AcceptanceCheckInputSchema,
 } from "./schemas.js";
 
 // Import visual modules
 import { saveBaseline, listBaselines, deleteBaseline, baselineExists } from "../visual/baseline.js";
 import { compareWithBaseline, generateDiffReport } from "../visual/diff.js";
 import { compareToDesign, generateDesignReport } from "../visual/design.js";
+
+// Import acceptance modules
+import {
+  parseCriteriaFile,
+  parseCriteriaContent,
+  runAcceptanceChecks,
+  executeTestFlow,
+  executeCriterionCheck,
+  generateReport,
+  generateMarkdownReport,
+  generateSummaryString,
+  saveReport,
+  getCriteriaStats,
+} from "../acceptance/index.js";
 
 // Import hardening modules
 import { lockManager, withLock } from "../core/lock.js";
@@ -957,6 +975,322 @@ export function createMcpServer(): McpServer {
             },
           ],
           isError: !result.match,
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  // === ACCEPTANCE CRITERIA TOOLS ===
+
+  server.tool(
+    "acceptance.parse",
+    "Parse an acceptance criteria markdown file and return structured test criteria. Use this to understand what criteria exist before running tests.",
+    AcceptanceParseInputSchema.shape,
+    async (args) => {
+      try {
+        if (!args.filePath && !args.content) {
+          throw createError("AC_NO_INPUT", "Either filePath or content must be provided");
+        }
+
+        let criteria;
+        if (args.filePath) {
+          criteria = await parseCriteriaFile(args.filePath);
+        } else {
+          criteria = parseCriteriaContent(args.content!);
+        }
+
+        const stats = getCriteriaStats(criteria);
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                success: true,
+                title: criteria.title,
+                totalCriteria: criteria.totalCriteria,
+                sections: criteria.sections.map(s => ({
+                  name: s.name,
+                  criteriaCount: s.criteria.length + s.subsections.reduce((sum, sub) => sum + sub.criteria.length, 0),
+                  subsections: s.subsections.map(sub => sub.name),
+                })),
+                testFlows: criteria.testFlows.map(f => ({
+                  name: f.name,
+                  stepCount: f.steps.length,
+                })),
+                statistics: stats,
+              }, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "acceptance.run",
+    "Run acceptance criteria tests against the current app state. Requires Detox session to be started. Returns a detailed report with pass/fail/blocked status and lists missing testIDs needed for blocked tests.",
+    AcceptanceRunInputSchema.shape,
+    async (args) => {
+      try {
+        if (!args.filePath && !args.content) {
+          throw createError("AC_NO_INPUT", "Either filePath or content must be provided");
+        }
+
+        const startTime = Date.now();
+
+        // Parse criteria
+        let criteria;
+        if (args.filePath) {
+          criteria = await parseCriteriaFile(args.filePath);
+        } else {
+          criteria = parseCriteriaContent(args.content!);
+        }
+
+        // Run checks
+        const { sectionReports, flowResults, allMissingRequirements, summary } = await runAcceptanceChecks(criteria, {
+          stopOnFailure: args.stopOnFailure,
+          sections: args.sections,
+          skipFlows: args.skipFlows,
+          skipManual: args.skipManual,
+          captureEvidenceOnPass: args.captureEvidenceOnPass,
+          timeout: args.timeout,
+        });
+
+        const totalDuration = Date.now() - startTime;
+
+        // Generate report
+        const report = generateReport(
+          criteria,
+          sectionReports,
+          flowResults,
+          allMissingRequirements,
+          totalDuration,
+          {
+            criteriaFile: args.filePath,
+            configuration: stateManager.getDetox().configuration,
+            deviceName: stateManager.getSimulator().deviceName,
+          }
+        );
+
+        // Save report files
+        const { markdownPath, jsonPath } = await saveReport(report);
+        report.artifacts.reportPath = markdownPath;
+        report.artifacts.jsonPath = jsonPath;
+
+        // Generate markdown for display
+        const markdown = generateMarkdownReport(report);
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: markdown,
+            },
+            {
+              type: "text",
+              text: `\n---\n**Report saved to:** ${markdownPath}\n**JSON data:** ${jsonPath}`,
+            },
+          ],
+          isError: summary.failed > 0 || summary.errors > 0,
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "acceptance.run_flow",
+    "Execute a specific test flow from acceptance criteria. Returns step-by-step results with evidence and lists any missing testIDs that blocked flow completion.",
+    AcceptanceRunFlowInputSchema.shape,
+    async (args) => {
+      try {
+        if (!args.filePath && !args.content) {
+          throw createError("AC_NO_INPUT", "Either filePath or content must be provided");
+        }
+
+        // Parse criteria
+        let criteria;
+        if (args.filePath) {
+          criteria = await parseCriteriaFile(args.filePath);
+        } else {
+          criteria = parseCriteriaContent(args.content!);
+        }
+
+        // Find the flow
+        const flow = criteria.testFlows.find(f =>
+          f.name.toLowerCase().includes(args.flowName.toLowerCase())
+        );
+
+        if (!flow) {
+          throw createError("AC_FLOW_NOT_FOUND", `Flow "${args.flowName}" not found`, {
+            details: `Available flows: ${criteria.testFlows.map(f => f.name).join(", ")}`,
+          });
+        }
+
+        // Execute flow
+        const result = await executeTestFlow(flow, {
+          screenshotEachStep: args.screenshotEachStep,
+          stopOnFailure: true,
+        });
+
+        // Format output
+        const lines: string[] = [];
+        lines.push(`## Flow: ${flow.name}`);
+        lines.push("");
+        lines.push(`**Progress:** ${result.completedSteps}/${result.totalSteps} steps`);
+        lines.push(`**Status:** ${result.success ? "PASSED" : result.blockedReason ? "BLOCKED" : "FAILED"}`);
+        lines.push("");
+
+        lines.push("### Steps");
+        lines.push("");
+        lines.push("| # | Description | Status | Details |");
+        lines.push("|---|-------------|--------|---------|");
+
+        for (const stepResult of result.stepResults) {
+          const status = stepResult.status.toUpperCase();
+          const desc = stepResult.step.description.slice(0, 50);
+          let details = "";
+          if (stepResult.missingRequirements?.length) {
+            details = `Missing: \`${stepResult.missingRequirements[0].suggestedValue}\``;
+          } else if (stepResult.status !== "pass") {
+            details = stepResult.message.slice(0, 40);
+          }
+          lines.push(`| ${stepResult.step.stepNumber} | ${desc} | ${status} | ${details} |`);
+        }
+
+        if (result.missingRequirements?.length) {
+          lines.push("");
+          lines.push("### Missing Requirements");
+          lines.push("");
+          lines.push("Add the following testIDs to make this flow fully testable:");
+          lines.push("");
+          for (const req of result.missingRequirements) {
+            lines.push(`- \`testID="${req.suggestedValue}"\` for: ${req.elementDescription.slice(0, 60)}`);
+          }
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: lines.join("\n"),
+            },
+            {
+              type: "text",
+              text: JSON.stringify({
+                success: result.success,
+                completedSteps: result.completedSteps,
+                totalSteps: result.totalSteps,
+                blocked: !!result.blockedReason,
+                missingRequirements: result.missingRequirements,
+                elapsedMs: result.elapsedMs,
+              }, null, 2),
+            },
+          ],
+          isError: !result.success,
+        };
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "acceptance.check",
+    "Check a single acceptance criterion by ID or description match. Useful for verifying specific requirements.",
+    AcceptanceCheckInputSchema.shape,
+    async (args) => {
+      try {
+        if (!args.filePath && !args.content) {
+          throw createError("AC_NO_INPUT", "Either filePath or content must be provided");
+        }
+
+        if (!args.criterionId && !args.description) {
+          throw createError("AC_CRITERION_NOT_FOUND", "Either criterionId or description must be provided");
+        }
+
+        // Parse criteria
+        let criteria;
+        if (args.filePath) {
+          criteria = await parseCriteriaFile(args.filePath);
+        } else {
+          criteria = parseCriteriaContent(args.content!);
+        }
+
+        // Find the criterion
+        let foundCriterion = null;
+        for (const section of criteria.sections) {
+          const allCriteria = [
+            ...section.criteria,
+            ...section.subsections.flatMap(sub => sub.criteria),
+          ];
+
+          for (const criterion of allCriteria) {
+            if (args.criterionId && criterion.id === args.criterionId) {
+              foundCriterion = criterion;
+              break;
+            }
+            if (args.description && criterion.description.toLowerCase().includes(args.description.toLowerCase())) {
+              foundCriterion = criterion;
+              break;
+            }
+          }
+          if (foundCriterion) break;
+        }
+
+        if (!foundCriterion) {
+          throw createError("AC_CRITERION_NOT_FOUND", `Criterion not found: ${args.criterionId || args.description}`);
+        }
+
+        // Execute check
+        const result = await executeCriterionCheck(foundCriterion, {
+          captureEvidence: true,
+          timeout: 30000,
+        });
+
+        // Format output
+        const statusIcon = result.status === "pass" ? "[x]" : result.status === "blocked" ? "[!]" : "[ ]";
+        const lines: string[] = [];
+        lines.push(`## ${statusIcon} ${result.criterion.description}`);
+        lines.push("");
+        lines.push(`**Status:** ${result.status.toUpperCase()}`);
+        lines.push(`**Section:** ${result.criterion.section}`);
+        lines.push(`**Type:** ${result.criterion.type}`);
+        lines.push(`**Duration:** ${result.elapsedMs}ms`);
+        lines.push("");
+
+        if (result.message && result.status !== "pass") {
+          lines.push(`**Message:** ${result.message}`);
+          lines.push("");
+        }
+
+        if (result.missingRequirements?.length) {
+          lines.push("### Missing Requirements");
+          lines.push("");
+          for (const req of result.missingRequirements) {
+            lines.push(`Add \`testID="${req.suggestedValue}"\` to enable testing.`);
+          }
+          lines.push("");
+        }
+
+        if (result.evidence?.screenshots?.length) {
+          lines.push(`**Evidence:** ${result.evidence.screenshots.join(", ")}`);
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: lines.join("\n"),
+            },
+          ],
+          isError: result.status === "fail" || result.status === "error",
         };
       } catch (error) {
         return handleToolError(error);
