@@ -5,7 +5,7 @@
 export interface LogEntry {
   timestamp: string;
   level: "debug" | "info" | "warn" | "error";
-  source: "mcp" | "simulator" | "expo" | "detox" | "visual" | "lock" | "retry";
+  source: "mcp" | "simulator" | "expo" | "detox" | "visual" | "lock" | "retry" | "acceptance";
   message: string;
   data?: Record<string, unknown>;
 }
@@ -76,6 +76,7 @@ class Logger {
     this.buffers.set("expo", new RingBuffer(bufferSize));
     this.buffers.set("detox", new RingBuffer(bufferSize));
     this.buffers.set("visual", new RingBuffer(bufferSize));
+    this.buffers.set("acceptance", new RingBuffer(bufferSize));
     this.globalBuffer = new RingBuffer(bufferSize);
     this.debugEnabled = process.env.MCP_DEBUG === "true";
   }

@@ -26,6 +26,10 @@ export type ErrorCode =
   | "CONFIG_INVALID"
   | "CONFIG_NOT_FOUND"
   | "ARTIFACT_WRITE_FAILED"
+  | "AC_PARSE_FAILED"
+  | "AC_CRITERION_NOT_FOUND"
+  | "AC_FLOW_NOT_FOUND"
+  | "AC_NO_INPUT"
   | "INTERNAL_ERROR";
 
 export interface McpError {
@@ -109,6 +113,15 @@ export const ErrorRemediation: Record<ErrorCode, string> = {
     "Configuration file not found. Create mcp.config.json or set MCP_CONFIG environment variable.",
   ARTIFACT_WRITE_FAILED:
     "Failed to write artifact. Check disk space and directory permissions.",
+  AC_PARSE_FAILED:
+    "Failed to parse acceptance criteria file. " +
+    "Check that the file is valid markdown with properly formatted checkboxes (- [ ] description).",
+  AC_CRITERION_NOT_FOUND:
+    "Criterion not found. Verify the criterion ID or description exists in the acceptance criteria file.",
+  AC_FLOW_NOT_FOUND:
+    "Test flow not found. Verify the flow name matches a flow in the acceptance criteria file (e.g., 'Flow 1: ...').",
+  AC_NO_INPUT:
+    "No input provided. Specify either filePath or content parameter.",
   INTERNAL_ERROR:
     "An unexpected internal error occurred. Check server logs for details.",
 };
