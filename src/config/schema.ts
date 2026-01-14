@@ -6,7 +6,7 @@ import { z } from "zod";
 
 export const DetoxConfigSchema = z.object({
   configuration: z.string().default("ios.sim.debug"),
-  reuseSession: z.boolean().default(true),
+  reuseSession: z.boolean().default(false),
   jestBinary: z.string().default("node_modules/.bin/jest"),
   detoxBinary: z.string().default("node_modules/.bin/detox"),
   testTimeoutMs: z.number().default(120000),
