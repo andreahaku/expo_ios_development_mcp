@@ -10,6 +10,7 @@ An MCP (Model Context Protocol) server that enables LLM tools like Claude Code, 
 - **Expo/Metro**: Start/stop Expo development server
 - **UI Automation**: Execute Detox actions (tap, swipe, type, wait, assert)
 - **Visual Regression**: Screenshot comparison with pixelmatch
+- **Acceptance Criteria Testing**: Parse markdown criteria, run automated tests, report missing testIDs
 - **Concurrency Control**: Lock manager prevents conflicting operations
 - **Retry with Backoff**: Automatic retry for transient failures
 
@@ -147,6 +148,15 @@ Add to `~/.cursor/mcp.json`:
 | `visual.baseline.delete` | Delete a baseline |
 | `visual.compare` | Compare against baseline (uses pixelmatch) |
 | `visual.compare_to_design` | Compare simulator screenshot against pasted Figma/design image |
+
+### Acceptance Criteria Testing
+
+| Tool | Description |
+|------|-------------|
+| `acceptance.parse` | Parse acceptance criteria markdown file into structured data |
+| `acceptance.run` | Run all acceptance tests with comprehensive reporting |
+| `acceptance.run_flow` | Execute a specific test flow by name |
+| `acceptance.check` | Check a single criterion by ID or description match |
 
 ### Flow
 
@@ -340,6 +350,104 @@ Compare this design against my current implementation:
 Focus on the header section only (use region comparison).
 ```
 
+### Acceptance Criteria Testing
+
+The acceptance criteria testing system allows you to write human-readable acceptance criteria in markdown and have them automatically tested against your app.
+
+#### Writing Acceptance Criteria Files
+
+Create a markdown file with checkbox items organized into sections:
+
+```markdown
+# Login Screen Acceptance Criteria
+
+## Visual Elements
+- [ ] App logo is visible at the top of the screen
+- [ ] Email input field is visible with placeholder "Enter email"
+- [ ] Password input field is visible with placeholder "Enter password"
+- [ ] "Sign In" button is visible and has text "Sign In"
+
+## Interactions
+- [ ] Tapping email field focuses the input
+- [ ] Tapping "Sign In" button with valid credentials navigates to home screen
+- [ ] Tapping "Forgot Password" link opens password reset modal
+
+## Test Flows
+
+### Happy Path Login
+1. Wait for element `login-screen` to be visible
+2. Type "test@example.com" into `email-input`
+3. Type "password123" into `password-input`
+4. Tap `sign-in-button`
+5. Wait for element `home-screen` to be visible
+```
+
+#### Parsing Acceptance Criteria
+
+```
+Parse the acceptance criteria file at /path/to/login-criteria.md
+```
+
+```
+Parse this acceptance criteria and tell me how many testable items there are:
+[paste markdown content]
+```
+
+#### Running Acceptance Tests
+
+```
+Run the acceptance criteria tests from /path/to/login-criteria.md
+```
+
+```
+Run acceptance tests for the login screen and generate a report
+```
+
+```
+Execute only the "Visual Elements" section from the acceptance criteria
+```
+
+#### Running Specific Test Flows
+
+```
+Run the "Happy Path Login" test flow from the acceptance criteria file
+```
+
+```
+Execute the signup flow from acceptance-criteria.md and take screenshots at each step
+```
+
+#### Checking Individual Criteria
+
+```
+Check if the criterion "App logo is visible" passes
+```
+
+```
+Verify the single criterion with ID "visual-1" from the acceptance file
+```
+
+#### Understanding Test Results
+
+The acceptance criteria runner produces detailed reports with:
+
+- **Pass**: Criterion was verified successfully
+- **Fail**: Criterion check failed (element not found, assertion failed)
+- **Blocked**: Cannot test because required testIDs are missing
+
+When tests are blocked, the report includes a "Missing Requirements" section:
+
+```markdown
+## Missing Requirements for Testability
+
+| Element | Suggested testID | Type | Reason |
+|---------|-----------------|------|--------|
+| App logo | `app-logo` | testID | Required for "App logo is visible" |
+| Sign In button | `sign-in-button` | testID | Required for "Tapping Sign In button" |
+```
+
+This helps developers add the necessary testIDs to make criteria testable.
+
 ### Debugging and Logs
 
 ```
@@ -478,6 +586,32 @@ Erase the simulator to start with a clean slate
 8. Repeat comparison until design match is satisfactory
 ```
 
+### Workflow 6: Acceptance Criteria Testing
+
+```
+1. Write acceptance criteria in markdown (login-criteria.md)
+2. "Boot simulator and start Expo"
+3. "Initialize Detox session"
+4. "Parse the acceptance criteria file at login-criteria.md"
+5. "Run all acceptance tests and generate a report"
+6. Review the report - fix any failing tests
+7. Add missing testIDs reported in the "Missing Requirements" section
+8. "Re-run the acceptance tests"
+9. Repeat until all criteria pass
+```
+
+### Workflow 7: Continuous Acceptance Testing During Development
+
+```
+1. "Set up test session with iPhone 15"
+2. Make code changes to your app...
+3. "Reload the app"
+4. "Run the acceptance criteria for the feature I'm working on"
+5. Review pass/fail/blocked status
+6. Fix issues and add missing testIDs
+7. Repeat steps 2-6 until acceptance criteria pass
+```
+
 ---
 
 ## Tips for Effective Prompts
@@ -505,6 +639,19 @@ Erase the simulator to start with a clean slate
 5. **Use flow.run for sequences**: For repeatable test flows, use the flow runner
    ```
    Execute this as a flow: tap login, type email, type password, tap submit
+   ```
+
+6. **Write acceptance criteria in markdown**: Use checkbox format for testable criteria
+   ```
+   - [ ] Button with testID "submit-btn" is visible
+   - [ ] Tapping "Login" navigates to home screen
+   ```
+
+7. **Include test flows in acceptance criteria**: Define step-by-step flows under `## Test Flows`
+   ```
+   ### Login Flow
+   1. Type "user@example.com" into `email-input`
+   2. Tap `submit-button`
    ```
 
 ---
@@ -539,6 +686,7 @@ src/
   expo/             # Expo/Metro control (start, stop, logs, flow runner)
   detox/            # Detox micro-test runner (actions, selectors, output parsing)
   visual/           # Visual regression (baseline management, pixelmatch diff)
+  acceptance/       # Acceptance criteria testing (parser, mapper, checker, reporter)
 ```
 
 ### Key Patterns
@@ -552,8 +700,8 @@ src/
 
 | Metric | Value |
 |--------|-------|
-| Total Files | 27 |
-| Total Lines | 4,768 |
+| Total Files | 41 |
+| Total Lines | 8,574 |
 | Avg Complexity | 12.9 |
 | Code Consistency | 99% |
 | Circular Deps | 0 |
