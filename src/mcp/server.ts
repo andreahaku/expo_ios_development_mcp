@@ -80,6 +80,7 @@ import {
   generateSummaryString,
   saveReport,
   getCriteriaStats,
+  DEFAULT_CRITERION_TIMEOUT_MS,
 } from "../acceptance/index.js";
 
 // Import hardening modules
@@ -1033,7 +1034,8 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "acceptance.run",
-    "Run acceptance criteria tests against the current app state. Requires Detox session to be started. Returns a detailed report with pass/fail/blocked status and lists missing testIDs needed for blocked tests.",
+    "Run acceptance criteria tests against current app state. Requires Detox session. " +
+      "Returns report with pass/fail/blocked status and missing testIDs for blocked tests.",
     AcceptanceRunInputSchema.shape,
     async (args) => {
       try {
@@ -1106,7 +1108,8 @@ export function createMcpServer(): McpServer {
 
   server.tool(
     "acceptance.run_flow",
-    "Execute a specific test flow from acceptance criteria. Returns step-by-step results with evidence and lists any missing testIDs that blocked flow completion.",
+    "Execute a specific test flow from acceptance criteria. " +
+      "Returns step-by-step results with evidence and lists missing testIDs that blocked completion.",
     AcceptanceRunFlowInputSchema.shape,
     async (args) => {
       try {
@@ -1251,7 +1254,7 @@ export function createMcpServer(): McpServer {
         // Execute check
         const result = await executeCriterionCheck(foundCriterion, {
           captureEvidence: true,
-          timeout: 30000,
+          timeout: DEFAULT_CRITERION_TIMEOUT_MS,
         });
 
         // Format output

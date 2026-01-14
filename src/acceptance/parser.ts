@@ -24,8 +24,15 @@ export async function parseCriteriaFile(
   filePath: string,
   options?: ParseOptions
 ): Promise<ParsedCriteria> {
-  const content = await readFile(filePath, "utf-8");
-  return parseCriteriaContent(content, options);
+  try {
+    const content = await readFile(filePath, "utf-8");
+    return parseCriteriaContent(content, options);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("ENOENT")) {
+      throw new Error(`Acceptance criteria file not found: ${filePath}`);
+    }
+    throw error;
+  }
 }
 
 /**

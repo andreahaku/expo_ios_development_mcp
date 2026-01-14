@@ -16,7 +16,16 @@ import type {
   SectionReport,
   ParsedCriteria,
 } from "./types.js";
+import {
+  PERCENTAGE_ROUNDING_FACTOR,
+  MS_IN_SECOND,
+  MS_IN_MINUTE,
+  TRUNCATE_ELEMENT_DESCRIPTION,
+  TRUNCATE_DESCRIPTION_SHORT,
+  TRUNCATE_MESSAGE_SHORT,
+} from "./constants.js";
 import { artifactManager } from "../core/artifacts.js";
+import { logger } from "../core/logger.js";
 
 /**
  * Generate a complete acceptance test report
@@ -107,8 +116,8 @@ function calculateOverallSummary(
     skipped,
     blocked,
     errors,
-    passRate: Math.round(passRate * 10) / 10,
-    testableRate: Math.round(testableRate * 10) / 10,
+    passRate: Math.round(passRate * PERCENTAGE_ROUNDING_FACTOR) / PERCENTAGE_ROUNDING_FACTOR,
+    testableRate: Math.round(testableRate * PERCENTAGE_ROUNDING_FACTOR) / PERCENTAGE_ROUNDING_FACTOR,
   };
 }
 
@@ -177,9 +186,9 @@ export function generateMarkdownReport(report: AcceptanceReport): string {
     lines.push("|---------|-----------------|------|--------|");
 
     for (const req of report.missingRequirements) {
-      const desc = truncate(req.elementDescription, 40);
+      const desc = truncate(req.elementDescription, TRUNCATE_ELEMENT_DESCRIPTION);
       lines.push(
-        `| ${desc} | \`${req.suggestedValue}\` | ${req.type} | ${truncate(req.reason, 50)} |`
+        `| ${desc} | \`${req.suggestedValue}\` | ${req.type} | ${truncate(req.reason, TRUNCATE_DESCRIPTION_SHORT)} |`
       );
     }
 
@@ -258,13 +267,13 @@ export function generateMarkdownReport(report: AcceptanceReport): string {
 
       for (const stepResult of stepResults) {
         const statusLabel = getStatusLabel(stepResult.status);
-        const desc = truncate(stepResult.step.description, 50);
+        const desc = truncate(stepResult.step.description, TRUNCATE_DESCRIPTION_SHORT);
         let details = "";
 
         if (stepResult.status === "blocked" && stepResult.missingRequirements?.length) {
           details = `Missing: \`${stepResult.missingRequirements[0].suggestedValue}\``;
         } else if (stepResult.status === "fail" || stepResult.status === "error") {
-          details = truncate(stepResult.message, 40);
+          details = truncate(stepResult.message, TRUNCATE_MESSAGE_SHORT);
         }
 
         lines.push(
@@ -306,32 +315,39 @@ export async function saveReport(
   markdownPath: string;
   jsonPath: string;
 }> {
-  const artifactsDir = await artifactManager.getSessionDir();
-  const reportsDir = join(artifactsDir, "reports");
+  try {
+    const artifactsDir = await artifactManager.getSessionDir();
+    const reportsDir = join(artifactsDir, "reports");
 
-  // Ensure reports directory exists
-  if (!existsSync(reportsDir)) {
-    await mkdir(reportsDir, { recursive: true });
+    // Ensure reports directory exists
+    if (!existsSync(reportsDir)) {
+      await mkdir(reportsDir, { recursive: true });
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const markdownPath = join(reportsDir, `${baseName}-${timestamp}.md`);
+    const jsonPath = join(reportsDir, `${baseName}-${timestamp}.json`);
+
+    // Generate and save markdown
+    const markdown = generateMarkdownReport(report);
+    await writeFile(markdownPath, markdown, "utf-8");
+
+    // Generate and save JSON
+    const json = generateJsonReport(report);
+    await writeFile(jsonPath, json, "utf-8");
+
+    // Update report with artifact paths
+    report.artifacts.reportPath = markdownPath;
+    report.artifacts.jsonPath = jsonPath;
+    report.artifacts.screenshotsDir = join(artifactsDir, "screenshots");
+
+    return { markdownPath, jsonPath };
+  } catch (error) {
+    logger.error("acceptance", "Error saving report", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   }
-
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const markdownPath = join(reportsDir, `${baseName}-${timestamp}.md`);
-  const jsonPath = join(reportsDir, `${baseName}-${timestamp}.json`);
-
-  // Generate and save markdown
-  const markdown = generateMarkdownReport(report);
-  await writeFile(markdownPath, markdown, "utf-8");
-
-  // Generate and save JSON
-  const json = generateJsonReport(report);
-  await writeFile(jsonPath, json, "utf-8");
-
-  // Update report with artifact paths
-  report.artifacts.reportPath = markdownPath;
-  report.artifacts.jsonPath = jsonPath;
-  report.artifacts.screenshotsDir = join(artifactsDir, "screenshots");
-
-  return { markdownPath, jsonPath };
 }
 
 /**
@@ -411,10 +427,10 @@ function truncate(str: string, maxLength: number): string {
  * Format duration in human-readable format
  */
 function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  const minutes = Math.floor(ms / 60000);
-  const seconds = ((ms % 60000) / 1000).toFixed(0);
+  if (ms < MS_IN_SECOND) return `${ms}ms`;
+  if (ms < MS_IN_MINUTE) return `${(ms / MS_IN_SECOND).toFixed(1)}s`;
+  const minutes = Math.floor(ms / MS_IN_MINUTE);
+  const seconds = ((ms % MS_IN_MINUTE) / MS_IN_SECOND).toFixed(0);
   return `${minutes}m ${seconds}s`;
 }
 
@@ -455,7 +471,7 @@ export function generateMissingRequirementsTable(
   lines.push("|---------|-----------------|");
 
   for (const req of requirements) {
-    lines.push(`| ${truncate(req.elementDescription, 50)} | \`${req.suggestedValue}\` |`);
+    lines.push(`| ${truncate(req.elementDescription, TRUNCATE_DESCRIPTION_SHORT)} | \`${req.suggestedValue}\` |`);
   }
 
   return lines.join("\n");

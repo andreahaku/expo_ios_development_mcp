@@ -20,6 +20,11 @@ import type {
 } from "./types.js";
 import { mapCriterionToCheck, mapFlowStep, type MappedCheck } from "./mapper.js";
 import { inferTestId } from "./parser.js";
+import {
+  DEFAULT_CRITERION_TIMEOUT_MS,
+  DEFAULT_FLOW_STEP_TIMEOUT_MS,
+  PERCENTAGE_ROUNDING_FACTOR,
+} from "./constants.js";
 import { runDetoxAction, type RunnerResult } from "../detox/runner.js";
 import { takeScreenshot } from "../simulator/screenshots.js";
 import { stateManager } from "../core/state.js";
@@ -34,39 +39,52 @@ export async function executeCriterionCheck(
   options: { captureEvidence?: boolean; timeout?: number } = {}
 ): Promise<CriterionResult> {
   const startTime = Date.now();
-  const { captureEvidence = true, timeout = 30000 } = options;
+  const { captureEvidence = true, timeout = DEFAULT_CRITERION_TIMEOUT_MS } = options;
 
-  // Map criterion to executable check
-  const mappedCheck = mapCriterionToCheck(criterion);
+  try {
+    // Map criterion to executable check
+    const mappedCheck = mapCriterionToCheck(criterion);
 
-  // Handle manual checks
-  if (mappedCheck.type === "manual") {
+    // Handle manual checks
+    if (mappedCheck.type === "manual") {
+      return {
+        criterion,
+        status: "skip",
+        message: mappedCheck.manualReason || "Requires manual verification",
+        elapsedMs: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    // Handle visual checks (screenshot analysis)
+    if (mappedCheck.type === "visual" || mappedCheck.type === "screenshot_analysis") {
+      return executeVisualCheck(criterion, mappedCheck, startTime, captureEvidence);
+    }
+
+    // Execute Detox check
+    if (mappedCheck.type === "detox" && mappedCheck.detoxSnippet) {
+      return executeDetoxCheck(criterion, mappedCheck, startTime, captureEvidence, timeout);
+    }
+
     return {
       criterion,
       status: "skip",
-      message: mappedCheck.manualReason || "Requires manual verification",
+      message: "No executable check could be generated",
+      elapsedMs: Date.now() - startTime,
+      timestamp: new Date().toISOString(),
+    };
+  } catch (error) {
+    logger.error("acceptance", `Error executing criterion check: ${criterion.id}`, {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return {
+      criterion,
+      status: "error",
+      message: `Unexpected error: ${error instanceof Error ? error.message : String(error)}`,
       elapsedMs: Date.now() - startTime,
       timestamp: new Date().toISOString(),
     };
   }
-
-  // Handle visual checks (screenshot analysis)
-  if (mappedCheck.type === "visual" || mappedCheck.type === "screenshot_analysis") {
-    return executeVisualCheck(criterion, mappedCheck, startTime, captureEvidence);
-  }
-
-  // Execute Detox check
-  if (mappedCheck.type === "detox" && mappedCheck.detoxSnippet) {
-    return executeDetoxCheck(criterion, mappedCheck, startTime, captureEvidence, timeout);
-  }
-
-  return {
-    criterion,
-    status: "skip",
-    message: "No executable check could be generated",
-    elapsedMs: Date.now() - startTime,
-    timestamp: new Date().toISOString(),
-  };
 }
 
 /**
@@ -328,105 +346,121 @@ export async function executeTestFlow(
   const startTime = Date.now();
   const { screenshotEachStep = true, stopOnFailure = true } = options;
 
-  const stepResults: FlowStepResult[] = [];
-  const allMissingRequirements: MissingRequirement[] = [];
-  let completedSteps = 0;
-  let blocked = false;
-  let blockedReason: string | undefined;
+  try {
+    const stepResults: FlowStepResult[] = [];
+    const allMissingRequirements: MissingRequirement[] = [];
+    let completedSteps = 0;
+    let blocked = false;
+    let blockedReason: string | undefined;
 
-  logger.info("acceptance", `Starting flow: ${flow.name}`, {
-    totalSteps: flow.steps.length,
-  });
+    logger.info("acceptance", `Starting flow: ${flow.name}`, {
+      totalSteps: flow.steps.length,
+    });
 
-  for (const step of flow.steps) {
-    const stepStartTime = Date.now();
-    const mappedStep = mapFlowStep(step);
+    for (const step of flow.steps) {
+      const stepStartTime = Date.now();
+      const mappedStep = mapFlowStep(step);
 
-    // If no action could be mapped, skip
-    if (!mappedStep.detoxSnippet) {
-      const result: FlowStepResult = {
-        step,
-        status: "skip",
-        message: `Could not map action "${step.action || step.description}" to executable step`,
-        elapsedMs: Date.now() - stepStartTime,
-      };
-      stepResults.push(result);
-
-      if (stopOnFailure) {
-        blocked = true;
-        blockedReason = `Step ${step.stepNumber}: ${result.message}`;
-        break;
-      }
-      continue;
-    }
-
-    // Execute the step
-    try {
-      const detoxResult = await runDetoxAction({
-        actionName: `flow:${flow.name}:step${step.stepNumber}`,
-        actionSnippet: mappedStep.detoxSnippet,
-        timeoutMs: 30000,
-      });
-
-      if (detoxResult.success) {
-        completedSteps++;
-
-        const evidence: CheckEvidence | undefined = screenshotEachStep
-          ? await captureStepEvidence(flow.name, step.stepNumber)
-          : undefined;
-
-        stepResults.push({
+      // If no action could be mapped, skip
+      if (!mappedStep.detoxSnippet) {
+        const result: FlowStepResult = {
           step,
-          status: "pass",
-          message: "Step completed successfully",
-          evidence,
+          status: "skip",
+          message: `Could not map action "${step.action || step.description}" to executable step`,
           elapsedMs: Date.now() - stepStartTime,
+        };
+        stepResults.push(result);
+
+        if (stopOnFailure) {
+          blocked = true;
+          blockedReason = `Step ${step.stepNumber}: ${result.message}`;
+          break;
+        }
+        continue;
+      }
+
+      // Execute the step
+      try {
+        const detoxResult = await runDetoxAction({
+          actionName: `flow:${flow.name}:step${step.stepNumber}`,
+          actionSnippet: mappedStep.detoxSnippet,
+          timeoutMs: DEFAULT_FLOW_STEP_TIMEOUT_MS,
         });
-      } else {
-        // Analyze the failure
-        const stepResult = analyzeStepFailure(step, detoxResult, stepStartTime);
+
+        if (detoxResult.success) {
+          completedSteps++;
+
+          const evidence: CheckEvidence | undefined = screenshotEachStep
+            ? await captureStepEvidence(flow.name, step.stepNumber)
+            : undefined;
+
+          stepResults.push({
+            step,
+            status: "pass",
+            message: "Step completed successfully",
+            evidence,
+            elapsedMs: Date.now() - stepStartTime,
+          });
+        } else {
+          // Analyze the failure
+          const stepResult = analyzeStepFailure(step, detoxResult, stepStartTime);
+          stepResults.push(stepResult);
+
+          if (stepResult.missingRequirements) {
+            allMissingRequirements.push(...stepResult.missingRequirements);
+          }
+
+          if (stepResult.status === "blocked" || stopOnFailure) {
+            blocked = stepResult.status === "blocked";
+            blockedReason = `Step ${step.stepNumber}: ${stepResult.message}`;
+            break;
+          }
+        }
+      } catch (error) {
+        const stepResult: FlowStepResult = {
+          step,
+          status: "error",
+          message: error instanceof Error ? error.message : "Unknown error",
+          elapsedMs: Date.now() - stepStartTime,
+        };
         stepResults.push(stepResult);
 
-        if (stepResult.missingRequirements) {
-          allMissingRequirements.push(...stepResult.missingRequirements);
-        }
-
-        if (stepResult.status === "blocked" || stopOnFailure) {
-          blocked = stepResult.status === "blocked";
+        if (stopOnFailure) {
           blockedReason = `Step ${step.stepNumber}: ${stepResult.message}`;
           break;
         }
       }
-    } catch (error) {
-      const stepResult: FlowStepResult = {
-        step,
-        status: "error",
-        message: error instanceof Error ? error.message : "Unknown error",
-        elapsedMs: Date.now() - stepStartTime,
-      };
-      stepResults.push(stepResult);
-
-      if (stopOnFailure) {
-        blockedReason = `Step ${step.stepNumber}: ${stepResult.message}`;
-        break;
-      }
     }
+
+    const success = completedSteps === flow.steps.length;
+
+    return {
+      flow,
+      success,
+      completedSteps,
+      totalSteps: flow.steps.length,
+      stepResults,
+      blockedReason: blocked ? blockedReason : undefined,
+      missingRequirements:
+        allMissingRequirements.length > 0 ? allMissingRequirements : undefined,
+      elapsedMs: Date.now() - startTime,
+      timestamp: new Date().toISOString(),
+    };
+  } catch (error) {
+    logger.error("acceptance", `Error executing flow: ${flow.name}`, {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return {
+      flow,
+      success: false,
+      completedSteps: 0,
+      totalSteps: flow.steps.length,
+      stepResults: [],
+      blockedReason: `Unexpected error: ${error instanceof Error ? error.message : String(error)}`,
+      elapsedMs: Date.now() - startTime,
+      timestamp: new Date().toISOString(),
+    };
   }
-
-  const success = completedSteps === flow.steps.length;
-
-  return {
-    flow,
-    success,
-    completedSteps,
-    totalSteps: flow.steps.length,
-    stepResults,
-    blockedReason: blocked ? blockedReason : undefined,
-    missingRequirements:
-      allMissingRequirements.length > 0 ? allMissingRequirements : undefined,
-    elapsedMs: Date.now() - startTime,
-    timestamp: new Date().toISOString(),
-  };
 }
 
 /**
@@ -518,149 +552,159 @@ export async function runAcceptanceChecks(
     skipFlows = false,
     skipManual = true,
     captureEvidenceOnPass = false,
-    timeout = 30000,
+    timeout = DEFAULT_CRITERION_TIMEOUT_MS,
   } = options;
 
   // Check prerequisites
   if (!stateManager.isDetoxReady()) {
-    throw createError("DETOX_NOT_READY", "Detox session must be started before running acceptance checks");
+    throw createError(
+      "DETOX_NOT_READY",
+      "Detox session must be started before running acceptance checks"
+    );
   }
 
-  const sectionReports: SectionReport[] = [];
-  const flowResults: FlowResult[] = [];
-  const allMissingRequirements: MissingRequirement[] = [];
+  try {
+    const sectionReports: SectionReport[] = [];
+    const flowResults: FlowResult[] = [];
+    const allMissingRequirements: MissingRequirement[] = [];
 
-  let totalPassed = 0;
-  let totalFailed = 0;
-  let totalSkipped = 0;
-  let totalBlocked = 0;
-  let totalErrors = 0;
+    let totalPassed = 0;
+    let totalFailed = 0;
+    let totalSkipped = 0;
+    let totalBlocked = 0;
+    let totalErrors = 0;
 
-  // Run section checks
-  for (const section of criteria.sections) {
-    // Filter sections if specified
-    if (filterSections && !filterSections.some((s) =>
-      section.name.toLowerCase().includes(s.toLowerCase())
-    )) {
-      continue;
-    }
-
-    const results: CriterionResult[] = [];
-
-    // Get all criteria in section (including subsections)
-    const allCriteria = [
-      ...section.criteria,
-      ...section.subsections.flatMap((sub) => sub.criteria),
-    ];
-
-    for (const criterion of allCriteria) {
-      // Skip manual criteria if requested
-      if (skipManual && criterion.type === "manual") {
-        results.push({
-          criterion,
-          status: "skip",
-          message: "Manual check skipped",
-          elapsedMs: 0,
-          timestamp: new Date().toISOString(),
-        });
-        totalSkipped++;
+    // Run section checks
+    for (const section of criteria.sections) {
+      // Filter sections if specified
+      if (filterSections && !filterSections.some((s) =>
+        section.name.toLowerCase().includes(s.toLowerCase())
+      )) {
         continue;
       }
 
-      logger.info("acceptance", `Checking: ${criterion.description.slice(0, 50)}...`);
+      const results: CriterionResult[] = [];
 
-      const result = await executeCriterionCheck(criterion, {
-        captureEvidence: true, // Always capture evidence for reporting
-        timeout,
+      // Get all criteria in section (including subsections)
+      const allCriteria = [
+        ...section.criteria,
+        ...section.subsections.flatMap((sub) => sub.criteria),
+      ];
+
+      for (const criterion of allCriteria) {
+        // Skip manual criteria if requested
+        if (skipManual && criterion.type === "manual") {
+          results.push({
+            criterion,
+            status: "skip",
+            message: "Manual check skipped",
+            elapsedMs: 0,
+            timestamp: new Date().toISOString(),
+          });
+          totalSkipped++;
+          continue;
+        }
+
+        logger.info("acceptance", `Checking: ${criterion.description.slice(0, 50)}...`);
+
+        const result = await executeCriterionCheck(criterion, {
+          captureEvidence: true, // Always capture evidence for reporting
+          timeout,
+        });
+
+        results.push(result);
+
+        // Collect missing requirements
+        if (result.missingRequirements) {
+          allMissingRequirements.push(...result.missingRequirements);
+        }
+
+        // Update counters
+        switch (result.status) {
+          case "pass":
+            totalPassed++;
+            break;
+          case "fail":
+            totalFailed++;
+            break;
+          case "skip":
+            totalSkipped++;
+            break;
+          case "blocked":
+            totalBlocked++;
+            break;
+          case "error":
+            totalErrors++;
+            break;
+        }
+
+        // Stop on failure if requested
+        if (stopOnFailure && (result.status === "fail" || result.status === "error")) {
+          break;
+        }
+      }
+
+      // Calculate section summary
+      const sectionSummary = calculateSummary(results);
+
+      sectionReports.push({
+        section,
+        results,
+        summary: sectionSummary,
       });
 
-      results.push(result);
-
-      // Collect missing requirements
-      if (result.missingRequirements) {
-        allMissingRequirements.push(...result.missingRequirements);
-      }
-
-      // Update counters
-      switch (result.status) {
-        case "pass":
-          totalPassed++;
-          break;
-        case "fail":
-          totalFailed++;
-          break;
-        case "skip":
-          totalSkipped++;
-          break;
-        case "blocked":
-          totalBlocked++;
-          break;
-        case "error":
-          totalErrors++;
-          break;
-      }
-
-      // Stop on failure if requested
-      if (stopOnFailure && (result.status === "fail" || result.status === "error")) {
+      if (stopOnFailure && (totalFailed > 0 || totalErrors > 0)) {
         break;
       }
     }
 
-    // Calculate section summary
-    const sectionSummary = calculateSummary(results);
+    // Run test flows
+    if (!skipFlows && !stopOnFailure) {
+      for (const flow of criteria.testFlows) {
+        logger.info("acceptance", `Running flow: ${flow.name}`);
 
-    sectionReports.push({
-      section,
-      results,
-      summary: sectionSummary,
-    });
+        const flowResult = await executeTestFlow(flow, {
+          screenshotEachStep: true,
+          stopOnFailure: true,
+        });
 
-    if (stopOnFailure && (totalFailed > 0 || totalErrors > 0)) {
-      break;
-    }
-  }
+        flowResults.push(flowResult);
 
-  // Run test flows
-  if (!skipFlows && !stopOnFailure) {
-    for (const flow of criteria.testFlows) {
-      logger.info("acceptance", `Running flow: ${flow.name}`);
-
-      const flowResult = await executeTestFlow(flow, {
-        screenshotEachStep: true,
-        stopOnFailure: true,
-      });
-
-      flowResults.push(flowResult);
-
-      if (flowResult.missingRequirements) {
-        allMissingRequirements.push(...flowResult.missingRequirements);
+        if (flowResult.missingRequirements) {
+          allMissingRequirements.push(...flowResult.missingRequirements);
+        }
       }
     }
+
+    // Calculate overall summary
+    const total = totalPassed + totalFailed + totalSkipped + totalBlocked + totalErrors;
+    const testable = total - totalSkipped;
+    const passRate = testable > 0 ? (totalPassed / testable) * 100 : 0;
+    const testableRate = total > 0 ? (testable / total) * 100 : 0;
+
+    const summary: ReportSummary = {
+      total,
+      passed: totalPassed,
+      failed: totalFailed,
+      skipped: totalSkipped,
+      blocked: totalBlocked,
+      errors: totalErrors,
+      passRate: Math.round(passRate * PERCENTAGE_ROUNDING_FACTOR) / PERCENTAGE_ROUNDING_FACTOR,
+      testableRate: Math.round(testableRate * PERCENTAGE_ROUNDING_FACTOR) / PERCENTAGE_ROUNDING_FACTOR,
+    };
+
+    return {
+      sectionReports,
+      flowResults,
+      allMissingRequirements,
+      summary,
+    };
+  } catch (error) {
+    logger.error("acceptance", "Error running acceptance checks", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   }
-
-  // Calculate overall summary
-  const total = totalPassed + totalFailed + totalSkipped + totalBlocked + totalErrors;
-  const testable = total - totalSkipped;
-  const passRate = testable > 0 ? (totalPassed / testable) * 100 : 0;
-  const testableRate = total > 0 ? (testable / total) * 100 : 0;
-
-  const summary: ReportSummary = {
-    total,
-    passed: totalPassed,
-    failed: totalFailed,
-    skipped: totalSkipped,
-    blocked: totalBlocked,
-    errors: totalErrors,
-    passRate: Math.round(passRate * 10) / 10,
-    testableRate: Math.round(testableRate * 10) / 10,
-  };
-
-  return {
-    sectionReports,
-    flowResults,
-    allMissingRequirements,
-    summary,
-  };
 }
 
 /**
@@ -707,7 +751,7 @@ function calculateSummary(results: CriterionResult[]): ReportSummary {
     skipped: counts.skipped,
     blocked: counts.blocked,
     errors: counts.errors,
-    passRate: Math.round(passRate * 10) / 10,
-    testableRate: Math.round(testableRate * 10) / 10,
+    passRate: Math.round(passRate * PERCENTAGE_ROUNDING_FACTOR) / PERCENTAGE_ROUNDING_FACTOR,
+    testableRate: Math.round(testableRate * PERCENTAGE_ROUNDING_FACTOR) / PERCENTAGE_ROUNDING_FACTOR,
   };
 }

@@ -114,7 +114,8 @@ export const ErrorRemediation: Record<ErrorCode, string> = {
   ARTIFACT_WRITE_FAILED:
     "Failed to write artifact. Check disk space and directory permissions.",
   AC_PARSE_FAILED:
-    "Failed to parse acceptance criteria file. Check that the file is valid markdown with properly formatted checkboxes (- [ ] description).",
+    "Failed to parse acceptance criteria file. " +
+    "Check that the file is valid markdown with properly formatted checkboxes (- [ ] description).",
   AC_CRITERION_NOT_FOUND:
     "Criterion not found. Verify the criterion ID or description exists in the acceptance criteria file.",
   AC_FLOW_NOT_FOUND:

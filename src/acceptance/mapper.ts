@@ -10,6 +10,13 @@ import type {
   CriterionType,
 } from "./types.js";
 import type { Selector } from "../mcp/schemas.js";
+import {
+  DEFAULT_LONG_PRESS_DURATION_MS,
+  DEFAULT_SCROLL_AMOUNT_PX,
+  MODAL_VISIBILITY_TIMEOUT_MS,
+  INTERACTION_CONFIDENCE_MULTIPLIER,
+  MODAL_CONFIDENCE_MULTIPLIER,
+} from "./constants.js";
 
 /**
  * Type of check to execute
@@ -219,7 +226,7 @@ function mapInteractionCheck(criterion: AcceptanceCriterion): MappedCheck {
       break;
 
     case "longPress":
-      snippet = `await element(${selectorExpr}).longPress(1000);`;
+      snippet = `await element(${selectorExpr}).longPress(${DEFAULT_LONG_PRESS_DURATION_MS});`;
       break;
 
     case "swipe":
@@ -228,7 +235,7 @@ function mapInteractionCheck(criterion: AcceptanceCriterion): MappedCheck {
       break;
 
     case "scroll":
-      snippet = `await element(${selectorExpr}).scroll(200, 'down');`;
+      snippet = `await element(${selectorExpr}).scroll(${DEFAULT_SCROLL_AMOUNT_PX}, 'down');`;
       break;
 
     default:
@@ -246,7 +253,7 @@ function mapInteractionCheck(criterion: AcceptanceCriterion): MappedCheck {
     type: "detox",
     criterion,
     detoxSnippet: snippet,
-    confidence: config.selector.confidence * 0.9, // Slightly lower due to interaction complexity
+    confidence: config.selector.confidence * INTERACTION_CONFIDENCE_MULTIPLIER,
   };
 }
 
@@ -278,16 +285,16 @@ function mapModalCheck(criterion: AcceptanceCriterion): MappedCheck {
 
     let snippet: string;
     if (isClose) {
-      snippet = `await waitFor(element(${selectorExpr})).not.toBeVisible().withTimeout(5000);`;
+      snippet = `await waitFor(element(${selectorExpr})).not.toBeVisible().withTimeout(${MODAL_VISIBILITY_TIMEOUT_MS});`;
     } else {
-      snippet = `await waitFor(element(${selectorExpr})).toBeVisible().withTimeout(5000);`;
+      snippet = `await waitFor(element(${selectorExpr})).toBeVisible().withTimeout(${MODAL_VISIBILITY_TIMEOUT_MS});`;
     }
 
     return {
       type: "detox",
       criterion,
       detoxSnippet: snippet,
-      confidence: config.selector.confidence * 0.8,
+      confidence: config.selector.confidence * MODAL_CONFIDENCE_MULTIPLIER,
     };
   }
 

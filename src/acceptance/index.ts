@@ -68,3 +68,9 @@ export {
   formatCriterionResult,
   generateMissingRequirementsTable,
 } from "./reporter.js";
+
+// Export constants
+export {
+  DEFAULT_CRITERION_TIMEOUT_MS,
+  DEFAULT_FLOW_STEP_TIMEOUT_MS,
+} from "./constants.js";
