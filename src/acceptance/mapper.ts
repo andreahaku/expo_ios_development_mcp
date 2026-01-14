@@ -1,22 +1,25 @@
 /**
  * Acceptance Criteria Mapper
- * Maps parsed criteria to executable Detox checks
+ * Orchestrates mapping of criteria to executable checks
  */
 
 import type {
   AcceptanceCriterion,
   FlowStep,
-  ElementSelector,
-  CriterionType,
 } from "./types.js";
 import type { Selector } from "../mcp/schemas.js";
+import { toDetoxSelector, selectorToExpression } from "./selector-utils.js";
 import {
-  DEFAULT_LONG_PRESS_DURATION_MS,
-  DEFAULT_SCROLL_AMOUNT_PX,
-  MODAL_VISIBILITY_TIMEOUT_MS,
-  INTERACTION_CONFIDENCE_MULTIPLIER,
-  MODAL_CONFIDENCE_MULTIPLIER,
-} from "./constants.js";
+  mapElementVisibilityCheck,
+  mapTextAssertionCheck,
+  mapColorCheck,
+  mapInteractionCheck,
+  mapModalCheck,
+  mapNavigationCheck,
+  mapScrollCheck,
+  mapStateChangeCheck,
+  mapLayoutCheck,
+} from "./check-mappers.js";
 
 /**
  * Type of check to execute
@@ -33,7 +36,7 @@ export interface MappedCheck {
   visualConfig?: VisualCheckConfig;
   flowSteps?: MappedFlowStep[];
   manualReason?: string;
-  confidence: number;  // 0-1, how confident we are this check will work
+  confidence: number; // 0-1, how confident we are this check will work
 }
 
 /**
@@ -63,7 +66,7 @@ export interface MappedFlowStep {
  * Map a criterion to an executable check
  */
 export function mapCriterionToCheck(criterion: AcceptanceCriterion): MappedCheck {
-  const { type, config } = criterion;
+  const { type } = criterion;
 
   switch (type) {
     case "element_visible":
@@ -104,312 +107,6 @@ export function mapCriterionToCheck(criterion: AcceptanceCriterion): MappedCheck
 }
 
 /**
- * Map element visibility criterion to Detox check
- */
-function mapElementVisibilityCheck(criterion: AcceptanceCriterion): MappedCheck {
-  const { config } = criterion;
-
-  if (!config.selector) {
-    return {
-      type: "manual",
-      criterion,
-      manualReason: "Cannot infer element selector from description",
-      confidence: 0,
-    };
-  }
-
-  const selector = toDetoxSelector(config.selector);
-  const selectorExpr = selectorToExpression(selector);
-
-  const snippet = `await waitFor(element(${selectorExpr})).toBeVisible().withTimeout(10000);`;
-
-  return {
-    type: "detox",
-    criterion,
-    detoxSnippet: snippet,
-    confidence: config.selector.confidence,
-  };
-}
-
-/**
- * Map text assertion criterion to Detox check
- */
-function mapTextAssertionCheck(criterion: AcceptanceCriterion): MappedCheck {
-  const { config } = criterion;
-
-  if (!config.selector && !config.expectedText) {
-    return {
-      type: "manual",
-      criterion,
-      manualReason: "Cannot infer element selector or expected text",
-      confidence: 0,
-    };
-  }
-
-  // If we have expected text but no selector, try to find by text
-  const selector = config.selector
-    ? toDetoxSelector(config.selector)
-    : { by: "text" as const, value: config.expectedText! };
-
-  const selectorExpr = selectorToExpression(selector);
-  const escapedText = JSON.stringify(config.expectedText || selector.value);
-
-  let snippet: string;
-  if (config.textMatchMode === "contains") {
-    snippet = `await expect(element(${selectorExpr})).toHaveText(new RegExp(${escapedText}));`;
-  } else {
-    snippet = `await expect(element(${selectorExpr})).toHaveText(${escapedText});`;
-  }
-
-  return {
-    type: "detox",
-    criterion,
-    detoxSnippet: snippet,
-    confidence: config.selector?.confidence ?? 0.5,
-  };
-}
-
-/**
- * Map color criterion to screenshot analysis check
- */
-function mapColorCheck(criterion: AcceptanceCriterion): MappedCheck {
-  const { config } = criterion;
-
-  if (!config.colorHex) {
-    return {
-      type: "manual",
-      criterion,
-      manualReason: "No color specification found",
-      confidence: 0,
-    };
-  }
-
-  // Color checks require screenshot analysis
-  return {
-    type: "screenshot_analysis",
-    criterion,
-    visualConfig: {
-      colorExtraction: {
-        targetColor: config.colorHex,
-        tolerance: 10, // Allow some tolerance for anti-aliasing
-      },
-    },
-    confidence: 0.6, // Color checks have moderate confidence
-  };
-}
-
-/**
- * Map interaction criterion to Detox check
- */
-function mapInteractionCheck(criterion: AcceptanceCriterion): MappedCheck {
-  const { config, description } = criterion;
-
-  if (!config.selector) {
-    return {
-      type: "manual",
-      criterion,
-      manualReason: "Cannot infer element selector for interaction",
-      confidence: 0,
-    };
-  }
-
-  const selector = toDetoxSelector(config.selector);
-  const selectorExpr = selectorToExpression(selector);
-
-  let snippet: string;
-  switch (config.interactionType) {
-    case "tap":
-      // For "is tappable" checks, we just verify the element exists and tap it
-      snippet = `const el = element(${selectorExpr});
-      await expect(el).toBeVisible();
-      await el.tap();`;
-      break;
-
-    case "longPress":
-      snippet = `await element(${selectorExpr}).longPress(${DEFAULT_LONG_PRESS_DURATION_MS});`;
-      break;
-
-    case "swipe":
-      const direction = config.swipeDirection || "up";
-      snippet = `await element(${selectorExpr}).swipe('${direction}');`;
-      break;
-
-    case "scroll":
-      snippet = `await element(${selectorExpr}).scroll(${DEFAULT_SCROLL_AMOUNT_PX}, 'down');`;
-      break;
-
-    default:
-      // Default to tap for generic interaction checks
-      snippet = `await element(${selectorExpr}).tap();`;
-  }
-
-  // Check for expected result after interaction
-  if (description.toLowerCase().includes("opens")) {
-    // After interaction, we might need to verify something opened
-    // This would require additional context about what should appear
-  }
-
-  return {
-    type: "detox",
-    criterion,
-    detoxSnippet: snippet,
-    confidence: config.selector.confidence * INTERACTION_CONFIDENCE_MULTIPLIER,
-  };
-}
-
-/**
- * Map modal behavior criterion to Detox check
- */
-function mapModalCheck(criterion: AcceptanceCriterion): MappedCheck {
-  const { config, description } = criterion;
-  const lower = description.toLowerCase();
-
-  // Check if this is about modal opening or closing
-  const isOpen = /opens?|appears?|shows?|slides?\s*(up|in)/i.test(lower);
-  const isClose =
-    /closes?|disappears?|hides?|dismiss/i.test(lower);
-
-  if (!config.selector && !isOpen && !isClose) {
-    return {
-      type: "manual",
-      criterion,
-      manualReason: "Cannot determine modal behavior to test",
-      confidence: 0,
-    };
-  }
-
-  // For modal checks, we typically verify visibility changes
-  if (config.selector) {
-    const selector = toDetoxSelector(config.selector);
-    const selectorExpr = selectorToExpression(selector);
-
-    let snippet: string;
-    if (isClose) {
-      snippet = `await waitFor(element(${selectorExpr})).not.toBeVisible().withTimeout(${MODAL_VISIBILITY_TIMEOUT_MS});`;
-    } else {
-      snippet = `await waitFor(element(${selectorExpr})).toBeVisible().withTimeout(${MODAL_VISIBILITY_TIMEOUT_MS});`;
-    }
-
-    return {
-      type: "detox",
-      criterion,
-      detoxSnippet: snippet,
-      confidence: config.selector.confidence * MODAL_CONFIDENCE_MULTIPLIER,
-    };
-  }
-
-  return {
-    type: "manual",
-    criterion,
-    manualReason: "Modal behavior requires specific element selector",
-    confidence: 0,
-  };
-}
-
-/**
- * Map navigation criterion to check
- */
-function mapNavigationCheck(criterion: AcceptanceCriterion): MappedCheck {
-  const { config, description } = criterion;
-
-  // Navigation checks often need to verify a screen appeared
-  // This is similar to element visibility but at screen level
-  if (config.selector) {
-    const selector = toDetoxSelector(config.selector);
-    const selectorExpr = selectorToExpression(selector);
-
-    const snippet = `await waitFor(element(${selectorExpr})).toBeVisible().withTimeout(10000);`;
-
-    return {
-      type: "detox",
-      criterion,
-      detoxSnippet: snippet,
-      confidence: config.selector.confidence * 0.7,
-    };
-  }
-
-  return {
-    type: "manual",
-    criterion,
-    manualReason: "Navigation check requires screen identifier",
-    confidence: 0,
-  };
-}
-
-/**
- * Map scroll behavior criterion to check
- */
-function mapScrollCheck(criterion: AcceptanceCriterion): MappedCheck {
-  const { config, description } = criterion;
-  const lower = description.toLowerCase();
-
-  // Scroll behavior is often about smoothness which is hard to test
-  // We can at least verify scrolling works
-  if (/smooth|responsive|works/i.test(lower)) {
-    return {
-      type: "manual",
-      criterion,
-      manualReason: "Scroll smoothness requires manual visual verification",
-      confidence: 0,
-    };
-  }
-
-  if (config.selector) {
-    const selector = toDetoxSelector(config.selector);
-    const selectorExpr = selectorToExpression(selector);
-
-    const direction = lower.includes("horizontal") ? "right" : "down";
-    const snippet = `await element(${selectorExpr}).scroll(100, '${direction}');`;
-
-    return {
-      type: "detox",
-      criterion,
-      detoxSnippet: snippet,
-      confidence: config.selector.confidence * 0.6,
-    };
-  }
-
-  return {
-    type: "manual",
-    criterion,
-    manualReason: "Scroll check requires scrollable element selector",
-    confidence: 0,
-  };
-}
-
-/**
- * Map state change criterion to check
- */
-function mapStateChangeCheck(criterion: AcceptanceCriterion): MappedCheck {
-  // State changes typically require:
-  // 1. Performing an action
-  // 2. Verifying the new state
-  // This is complex and usually needs manual setup
-
-  return {
-    type: "manual",
-    criterion,
-    manualReason: "State change verification requires multi-step flow",
-    confidence: 0,
-  };
-}
-
-/**
- * Map layout criterion to visual check
- */
-function mapLayoutCheck(criterion: AcceptanceCriterion): MappedCheck {
-  // Layout checks are best done with visual regression testing
-  return {
-    type: "visual",
-    criterion,
-    visualConfig: {
-      // Will use full screenshot comparison
-    },
-    confidence: 0.5,
-  };
-}
-
-/**
  * Map a flow step to an executable action
  */
 export function mapFlowStep(step: FlowStep): MappedFlowStep {
@@ -433,10 +130,10 @@ export function mapFlowStep(step: FlowStep): MappedFlowStep {
         const textMatch = description.match(/["']([^"']+)["']/);
         if (textMatch) {
           const text = JSON.stringify(textMatch[1]);
-          detoxSnippet = `const input = element(${expr});
-      await input.tap();
-      await input.clearText();
-      await input.typeText(${text});`;
+          detoxSnippet = `const input = element(${expr});\n` +
+            `      await input.tap();\n` +
+            `      await input.clearText();\n` +
+            `      await input.typeText(${text});`;
         }
       }
       break;
@@ -474,33 +171,6 @@ export function mapFlowStep(step: FlowStep): MappedFlowStep {
     selector: detoxSelector,
     expectedResult: step.expectedResult,
   };
-}
-
-/**
- * Convert our ElementSelector to Detox Selector format
- */
-function toDetoxSelector(selector: ElementSelector): Selector {
-  return {
-    by: selector.by,
-    value: selector.value,
-  };
-}
-
-/**
- * Convert selector to Detox expression string
- */
-function selectorToExpression(selector: Selector): string {
-  const value = JSON.stringify(selector.value);
-  switch (selector.by) {
-    case "id":
-      return `by.id(${value})`;
-    case "text":
-      return `by.text(${value})`;
-    case "label":
-      return `by.label(${value})`;
-    default:
-      return `by.id(${value})`;
-  }
 }
 
 /**
